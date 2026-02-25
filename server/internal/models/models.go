@@ -9,7 +9,6 @@ type User struct {
 	Username    string    `json:"username"`
 	DisplayName string    `json:"display_name"`
 	AvatarURL   string    `json:"avatar_url"`
-	Email       string    `json:"email,omitempty"`
 	Role        string    `json:"role"`
 	Settings    JSON      `json:"settings"`
 	CreatedAt   time.Time `json:"created_at"`

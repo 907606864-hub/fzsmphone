@@ -43,8 +43,8 @@
         >
           <div class="conv-avatar">
             <img
-              v-if="conv.character?.avatar_url"
-              :src="conv.character.avatar_url"
+              v-if="getConvAvatar(conv)"
+              :src="getConvAvatar(conv)"
               :alt="conv.title"
             />
             <span v-else class="avatar-placeholder">
@@ -60,7 +60,7 @@
 
           <div class="conv-info">
             <div class="conv-top">
-              <span class="conv-name">{{ conv.title || conv.character?.name || '未命名' }}</span>
+              <span class="conv-name">{{ conv.title || '未命名' }}</span>
               <span class="conv-time">{{ formatTime(conv.last_at) }}</span>
             </div>
             <div class="conv-bottom">
@@ -69,7 +69,7 @@
             </div>
           </div>
 
-          <!-- Swipe delete -->
+          <!-- Delete button -->
           <button class="conv-delete" @click.stop="handleDelete(conv.id)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="3 6 5 6 21 6" />
@@ -84,7 +84,7 @@
     <div v-if="showCharacterPicker" class="character-picker">
       <NavBar title="选择角色" @back="showCharacterPicker = false" />
       <div class="picker-list">
-        <div v-if="chatStore.characters.length === 0" class="empty-state">
+        <div v-if="charList.length === 0" class="empty-state">
           <div class="empty-emoji">🎭</div>
           <div class="empty-title">还没有角色</div>
           <div class="empty-subtitle">先去角色管理创建角色吧</div>
@@ -93,13 +93,13 @@
           </button>
         </div>
         <div
-          v-for="char in chatStore.characters"
+          v-for="char in charList"
           :key="char.id"
           class="char-item"
           @click="startChat(char)"
         >
           <div class="char-avatar">
-            <img v-if="char.avatar_url" :src="char.avatar_url" :alt="char.name" />
+            <img v-if="char.avatar" :src="char.avatar" :alt="char.name" />
             <span v-else>🤖</span>
           </div>
           <div class="char-info">
@@ -152,7 +152,19 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import NavBar from '@/components/common/NavBar.vue'
-import { useChatStore, type Conversation, type Character } from '@/stores/chat'
+import { useChatStore } from '@/stores/chat'
+import type { Conversation } from '@/stores/chat'
+
+interface LocalCharacter {
+  id: string
+  type: string
+  name: string
+  avatar?: string
+  description?: string
+  persona?: string
+  scenario?: string
+  firstMessage?: string
+}
 
 const router = useRouter()
 const chatStore = useChatStore()
@@ -160,15 +172,20 @@ const chatStore = useChatStore()
 const searchQuery = ref('')
 const showMenu = ref(false)
 const showCharacterPicker = ref(false)
+const charList = ref<LocalCharacter[]>([])
 
 const filteredConversations = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   if (!q) return chatStore.sortedConversations
   return chatStore.sortedConversations.filter(c => {
-    const name = (c.title || c.character?.name || '').toLowerCase()
+    const name = (c.title || '').toLowerCase()
     return name.includes(q)
   })
 })
+
+function getConvAvatar(conv: Conversation): string {
+  return conv.character?.avatar || (conv.character as any)?.avatar_url || ''
+}
 
 function formatTime(dateStr: string): string {
   if (!dateStr) return ''
@@ -197,29 +214,42 @@ function openConversation(conv: Conversation) {
   }
 }
 
+function loadCharacters() {
+  try {
+    const saved = localStorage.getItem('characters')
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (Array.isArray(parsed)) {
+        charList.value = parsed.filter((c: any) => c.type === 'char')
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
 function handleAddFriend() {
   showMenu.value = false
+  loadCharacters()
   showCharacterPicker.value = true
-  chatStore.fetchCharacters()
 }
 
 function handleCreateGroup() {
   showMenu.value = false
-  // TODO: implement group creation flow
   router.push('/characters')
 }
 
-async function startChat(char: Character) {
+function startChat(char: LocalCharacter) {
   showCharacterPicker.value = false
-  const conv = await chatStore.createConversation(char.id)
+  const conv = chatStore.createConversation(char.id)
   if (conv) {
     router.push(`/chat/${conv.id}`)
   }
 }
 
-async function handleDelete(id: number) {
+function handleDelete(id: string) {
   if (confirm('确定要删除这个会话吗？聊天记录也会被删除')) {
-    await chatStore.deleteConversation(id)
+    chatStore.deleteConversation(id)
   }
 }
 

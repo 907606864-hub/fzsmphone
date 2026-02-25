@@ -33,7 +33,6 @@ type discordUser struct {
 	Username      string `json:"username"`
 	GlobalName    string `json:"global_name"`
 	Avatar        string `json:"avatar"`
-	Email         string `json:"email"`
 	Discriminator string `json:"discriminator"`
 }
 
@@ -154,16 +153,15 @@ func (h *AuthHandler) DiscordCallback(w http.ResponseWriter, r *http.Request) {
 	var role string
 
 	err = h.DB.Pool.QueryRow(ctx, `
-		INSERT INTO users (discord_id, username, display_name, avatar_url, email)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO users (discord_id, username, display_name, avatar_url)
+		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (discord_id) DO UPDATE SET
 			username = EXCLUDED.username,
 			display_name = EXCLUDED.display_name,
 			avatar_url = EXCLUDED.avatar_url,
-			email = EXCLUDED.email,
 			updated_at = NOW()
 		RETURNING id, role
-	`, dUser.ID, dUser.Username, displayName, avatarURL, dUser.Email).Scan(&userID, &role)
+	`, dUser.ID, dUser.Username, displayName, avatarURL).Scan(&userID, &role)
 	if err != nil {
 		mw.Error(w, http.StatusInternalServerError, "failed to save user")
 		return

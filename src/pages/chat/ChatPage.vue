@@ -17,17 +17,23 @@
       <span>⚠️ 未配置 API Key，点击前往设置</span>
     </div>
 
+    <!-- Active Preset indicator -->
+    <div v-if="activePresetName" class="preset-indicator">
+      <span>🎭 预设：{{ activePresetName }}</span>
+      <span v-if="userPersonaName" class="persona-tag">👤 {{ userPersonaName }}</span>
+    </div>
+
     <!-- Messages -->
     <div ref="messagesRef" class="messages-area" @scroll="handleScroll">
       <div class="messages-inner">
         <!-- Date divider -->
-        <div class="date-divider" v-if="messages.length > 0">
-          <span>{{ formatDate(messages[0]?.created_at || messages[0]?.timestamp) }}</span>
+        <div class="date-divider" v-if="chatStore.currentMessages.length > 0">
+          <span>{{ formatDate(chatStore.currentMessages[0]?.created_at) }}</span>
         </div>
 
         <TransitionGroup name="msg">
           <div
-            v-for="msg in messages"
+            v-for="msg in chatStore.currentMessages"
             :key="msg.id"
             class="message-row"
             :class="{
@@ -37,13 +43,14 @@
           >
             <!-- AI Avatar -->
             <div class="msg-avatar" v-if="msg.role === 'assistant'">
-              <span class="avatar-emoji">🤖</span>
+              <img v-if="characterAvatar" :src="characterAvatar" class="avatar-img" />
+              <span v-else class="avatar-emoji">🤖</span>
             </div>
 
             <!-- Bubble -->
             <div class="msg-bubble" :class="msg.role">
               <p class="msg-text">{{ msg.content }}</p>
-              <span class="msg-time">{{ formatMsgTime(msg.created_at || msg.timestamp) }}</span>
+              <span class="msg-time">{{ formatMsgTime(msg.created_at) }}</span>
             </div>
 
             <!-- User avatar -->
@@ -56,7 +63,8 @@
         <!-- Typing indicator -->
         <div v-if="isTyping" class="message-row is-assistant">
           <div class="msg-avatar">
-            <span class="avatar-emoji">🤖</span>
+            <img v-if="characterAvatar" :src="characterAvatar" class="avatar-img" />
+            <span v-else class="avatar-emoji">🤖</span>
           </div>
           <div class="msg-bubble assistant typing-bubble">
             <div v-if="streamingText" class="msg-text">{{ streamingText }}</div>
@@ -104,6 +112,39 @@
         </button>
       </div>
     </div>
+
+    <!-- Info Panel -->
+    <div v-if="showInfo" class="info-overlay" @click.self="showInfo = false">
+      <div class="info-panel">
+        <div class="info-header">
+          <h3>聊天信息</h3>
+          <span class="close-btn" @click="showInfo = false">✕</span>
+        </div>
+        <div class="info-body">
+          <div class="info-section" v-if="currentCharacter">
+            <div class="info-label">角色</div>
+            <div class="info-value">{{ currentCharacter.name }}</div>
+            <div v-if="currentCharacter.description" class="info-desc">{{ currentCharacter.description }}</div>
+          </div>
+          <div class="info-section" v-if="activePresetName">
+            <div class="info-label">当前预设</div>
+            <div class="info-value">{{ activePresetName }}</div>
+          </div>
+          <div class="info-section" v-if="userPersonaName">
+            <div class="info-label">用户人设</div>
+            <div class="info-value">{{ userPersonaName }}</div>
+          </div>
+          <div class="info-section" v-if="matchedWorldBookCount > 0">
+            <div class="info-label">世界书匹配</div>
+            <div class="info-value">{{ matchedWorldBookCount }} 个条目已注入</div>
+          </div>
+          <div class="info-actions">
+            <button class="info-action-btn" @click="clearChat">🗑️ 清空聊天记录</button>
+            <button class="info-action-btn" @click="regenerateLast">🔄 重新生成最后回复</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -113,8 +154,17 @@ import { useRoute, useRouter } from 'vue-router'
 import NavBar from '@/components/common/NavBar.vue'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
-import { sendAIRequest, buildSystemPrompt, splitIntoSegments } from '@/utils/aiService'
-import type { AIMessage } from '@/utils/aiService'
+import {
+  sendAIRequest,
+  buildFullMessages,
+  splitIntoSegments,
+  getActivePreset,
+  getCurrentUserPersona,
+  getCharacterById,
+  getCharacterWorldBookEntries,
+  matchWorldBookEntries,
+} from '@/utils/aiService'
+import type { AIMessage, CharacterData } from '@/utils/aiService'
 
 const route = useRoute()
 const router = useRouter()
@@ -128,33 +178,48 @@ const isTyping = ref(false)
 const streamingText = ref('')
 const showInfo = ref(false)
 const showEmojiPanel = ref(false)
+const matchedWorldBookCount = ref(0)
 let abortController: AbortController | null = null
-
-// 本地消息存储（用于前端直接AI调用场景）
-const localMessages = ref<any[]>([])
 
 const conversationId = computed(() => {
   const id = route.params.friendId || route.params.id
   return id ? String(id) : null
 })
 
+// 获取当前角色
+const currentCharacter = computed((): CharacterData | null => {
+  const conv = chatStore.currentConversation
+  if (!conv) return null
+
+  // 从 localStorage 获取完整角色数据
+  if (conv.characterId) {
+    return getCharacterById(conv.characterId)
+  }
+
+  return conv.character as CharacterData | null
+})
+
+const characterAvatar = computed(() => {
+  const char = currentCharacter.value
+  return char?.avatar || (char as any)?.avatar_url || ''
+})
+
 const chatTitle = computed(() => {
   return chatStore.currentConversation?.title
-    || chatStore.currentConversation?.character?.name
+    || currentCharacter.value?.name
     || '聊天'
 })
 
-// 使用本地消息或store消息
-const messages = computed(() => {
-  if (localMessages.value.length > 0) {
-    return localMessages.value
-  }
-  return chatStore.currentMessages
+// 预设名称
+const activePresetName = computed(() => {
+  const preset = getActivePreset()
+  return preset?.name || ''
 })
 
-// 获取当前角色信息
-const currentCharacter = computed(() => {
-  return chatStore.currentConversation?.character || null
+// 用户人设名称
+const userPersonaName = computed(() => {
+  const persona = getCurrentUserPersona()
+  return persona?.name || ''
 })
 
 function formatDate(dateStr: string | number): string {
@@ -205,7 +270,6 @@ function handleKeydown(e: KeyboardEvent) {
       e.preventDefault()
       handleSend()
     }
-    // 如果是 'newline' 模式，Enter 正常换行
   }
 }
 
@@ -213,81 +277,31 @@ function goToSettings() {
   router.push('/customize')
 }
 
-// 加载本地消息
-function loadLocalMessages() {
-  if (!conversationId.value) return
-  const key = `chat-messages-${conversationId.value}`
-  try {
-    const saved = localStorage.getItem(key)
-    if (saved) {
-      localMessages.value = JSON.parse(saved)
-    }
-  } catch {
-    // ignore
-  }
-}
-
-// 保存本地消息
-function saveLocalMessages() {
-  if (!conversationId.value) return
-  const key = `chat-messages-${conversationId.value}`
-  try {
-    // 只保留最近200条
-    const toSave = localMessages.value.slice(-200)
-    localStorage.setItem(key, JSON.stringify(toSave))
-  } catch {
-    // ignore
-  }
-}
-
-// 添加本地消息
-function addMessage(role: 'user' | 'assistant', content: string) {
-  const msg = {
-    id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    conversation_id: conversationId.value,
-    role,
-    content,
-    msg_type: 'text',
-    extra: {},
-    created_at: new Date().toISOString(),
-    timestamp: Date.now(),
-  }
-  localMessages.value.push(msg)
-  saveLocalMessages()
-  return msg
-}
-
 // 构建消息历史给 AI
 function buildMessageHistory(): AIMessage[] {
-  const msgs: AIMessage[] = []
-
-  // 系统提示词
   const character = currentCharacter.value
-  const systemPrompt = buildSystemPrompt(
-    character || { name: chatTitle.value },
-    settingsStore.settings.userName ? { name: settingsStore.settings.userName } : undefined,
-    settingsStore.settings.maxLength,
-  )
-  msgs.push({ role: 'system', content: systemPrompt })
 
-  // 最近消息上下文
-  const recent = localMessages.value
+  // 获取最近消息上下文
+  const recent: AIMessage[] = chatStore.currentMessages
     .filter(m => m.role === 'user' || m.role === 'assistant')
     .slice(-10)
-
-  for (const m of recent) {
-    msgs.push({
+    .map(m => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
-    })
-  }
+    }))
 
-  return msgs
+  // 使用 buildFullMessages 构建完整消息列表
+  return buildFullMessages(
+    character,
+    recent,
+    settingsStore.settings.maxLength,
+  )
 }
 
 async function handleSend() {
   const text = inputText.value.trim()
   if (!text || isTyping.value) return
+  if (!conversationId.value) return
 
   inputText.value = ''
   if (inputRef.value) {
@@ -295,24 +309,135 @@ async function handleSend() {
   }
 
   // 添加用户消息
-  addMessage('user', text)
+  chatStore.addMessage(conversationId.value, 'user', text)
   scrollToBottom()
-
-  // 也发到后端（如果有的话）
-  if (conversationId.value) {
-    chatStore.sendMessage(Number(conversationId.value), text).catch(() => {})
-  }
 
   // 检查 API Key
   const s = settingsStore.settings
   if (!s.apiKey) {
-    // 无 API Key 时不调用 AI
-    addMessage('assistant', '⚠️ 请先在设置中配置 API Key 才能和我聊天哦~')
+    chatStore.addMessage(conversationId.value, 'assistant', '⚠️ 请先在设置中配置 API Key 才能和我聊天哦~')
     scrollToBottom()
     return
   }
 
   // 调用 AI
+  isTyping.value = true
+  streamingText.value = ''
+  abortController = new AbortController()
+
+  try {
+    const aiMessages = buildMessageHistory()
+
+    // 更新世界书匹配计数
+    const character = currentCharacter.value
+    const allEntries = getCharacterWorldBookEntries(character?.id)
+    const recentText = chatStore.currentMessages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .slice(-10)
+      .map(m => m.content)
+      .join(' ')
+    const matched = matchWorldBookEntries(recentText, allEntries)
+    matchedWorldBookCount.value = matched.length
+
+    const apiUrl = settingsStore.getApiUrl()
+    const isStream = s.streamEnabled
+
+    const response = await sendAIRequest({
+      apiKey: s.apiKey,
+      apiUrl: apiUrl,
+      model: s.model,
+      messages: aiMessages,
+      temperature: s.temperature,
+      maxTokens: s.maxLength,
+      stream: isStream,
+      timeout: s.timeout,
+      signal: abortController.signal,
+      onChunk: (chunk: string) => {
+        streamingText.value += chunk
+        scrollToBottom()
+      },
+    })
+
+    isTyping.value = false
+    const content = isStream ? streamingText.value.trim() : response.content
+    streamingText.value = ''
+
+    if (!content) {
+      chatStore.addMessage(conversationId.value!, 'assistant', '(AI 返回了空回复)')
+      scrollToBottom()
+      return
+    }
+
+    // 分段发送
+    if (s.enableSplit) {
+      const segments = splitIntoSegments(content)
+      for (let i = 0; i < segments.length; i++) {
+        if (i > 0) {
+          isTyping.value = true
+          await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 500))
+          isTyping.value = false
+        }
+        chatStore.addMessage(conversationId.value!, 'assistant', segments[i])
+        scrollToBottom()
+      }
+    } else {
+      chatStore.addMessage(conversationId.value!, 'assistant', content)
+      scrollToBottom()
+    }
+  } catch (err: any) {
+    isTyping.value = false
+    streamingText.value = ''
+
+    if (err.name === 'AbortError' || err.message?.includes('abort')) {
+      return
+    }
+
+    chatStore.addMessage(conversationId.value!, 'assistant', `❌ AI 回复失败：${err.message}`)
+    scrollToBottom()
+  } finally {
+    abortController = null
+  }
+}
+
+function clearChat() {
+  if (!conversationId.value) return
+  if (!confirm('确定要清空所有聊天记录吗？')) return
+
+  chatStore.currentMessages.splice(0)
+  chatStore.saveMessages(conversationId.value)
+
+  // 如果角色有开场白，重新添加
+  const char = currentCharacter.value
+  if (char?.firstMessage) {
+    chatStore.addMessage(conversationId.value, 'assistant', char.firstMessage)
+  }
+
+  showInfo.value = false
+  scrollToBottom(false)
+}
+
+async function regenerateLast() {
+  if (!conversationId.value) return
+  
+  // 删除最后一条 assistant 消息
+  const msgs = chatStore.currentMessages
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i].role === 'assistant') {
+      msgs.splice(i, 1)
+      break
+    }
+  }
+  chatStore.saveMessages(conversationId.value)
+  showInfo.value = false
+
+  // 找到最后一条用户消息来重新生成
+  const lastUserMsg = [...msgs].reverse().find(m => m.role === 'user')
+  if (!lastUserMsg) return
+
+  // 检查 API Key
+  const s = settingsStore.settings
+  if (!s.apiKey) return
+
   isTyping.value = true
   streamingText.value = ''
   abortController = new AbortController()
@@ -333,7 +458,6 @@ async function handleSend() {
       timeout: s.timeout,
       signal: abortController.signal,
       onChunk: (chunk: string) => {
-        // 流式模式：实时更新显示
         streamingText.value += chunk
         scrollToBottom()
       },
@@ -343,63 +467,35 @@ async function handleSend() {
     const content = isStream ? streamingText.value.trim() : response.content
     streamingText.value = ''
 
-    if (!content) {
-      addMessage('assistant', '(AI 返回了空回复)')
-      scrollToBottom()
-      return
-    }
-
-    // 分段发送
-    if (s.enableSplit) {
-      const segments = splitIntoSegments(content)
-      for (let i = 0; i < segments.length; i++) {
-        if (i > 0) {
-          // 模拟打字延迟
-          isTyping.value = true
-          await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 500))
-          isTyping.value = false
-        }
-        addMessage('assistant', segments[i])
-        scrollToBottom()
-      }
-    } else {
-      addMessage('assistant', content)
+    if (content) {
+      chatStore.addMessage(conversationId.value!, 'assistant', content)
       scrollToBottom()
     }
   } catch (err: any) {
     isTyping.value = false
     streamingText.value = ''
-
-    if (err.name === 'AbortError' || err.message?.includes('abort')) {
-      return // 用户主动取消
+    if (err.name !== 'AbortError') {
+      chatStore.addMessage(conversationId.value!, 'assistant', `❌ 重新生成失败：${err.message}`)
+      scrollToBottom()
     }
-
-    addMessage('assistant', `❌ AI 回复失败：${err.message}`)
-    scrollToBottom()
   } finally {
     abortController = null
   }
 }
 
 watch(
-  () => messages.value.length,
+  () => chatStore.currentMessages.length,
   () => scrollToBottom(),
 )
 
 onMounted(() => {
-  // 加载本地消息
-  loadLocalMessages()
-
-  // 也尝试从后端加载
   if (conversationId.value) {
-    chatStore.fetchMessages(Number(conversationId.value)).catch(() => {})
+    chatStore.fetchMessages(conversationId.value)
   }
-
   scrollToBottom(false)
 })
 
 onUnmounted(() => {
-  // 取消进行中的请求
   if (abortController) {
     abortController.abort()
   }
@@ -426,8 +522,24 @@ onUnmounted(() => {
   transition: opacity 0.2s;
 }
 
-.api-warning:active {
-  opacity: 0.8;
+.api-warning:active { opacity: 0.8; }
+
+/* Preset indicator */
+.preset-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 16px;
+  background: var(--bg-primary);
+  border-bottom: 0.5px solid var(--separator);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.persona-tag {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--fill-tertiary);
 }
 
 /* Messages */
@@ -438,9 +550,7 @@ onUnmounted(() => {
   padding: 0;
 }
 
-.messages-area::-webkit-scrollbar {
-  display: none;
-}
+.messages-area::-webkit-scrollbar { display: none; }
 
 .messages-inner {
   padding: 12px 12px 20px;
@@ -490,6 +600,13 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
 }
 
 .avatar-emoji {
@@ -543,9 +660,7 @@ onUnmounted(() => {
 }
 
 /* Typing */
-.typing-bubble {
-  padding: 14px 18px;
-}
+.typing-bubble { padding: 14px 18px; }
 
 .typing-dots {
   display: flex;
@@ -561,23 +676,12 @@ onUnmounted(() => {
   animation: typingBounce 1.2s infinite;
 }
 
-.typing-dots span:nth-child(2) {
-  animation-delay: 0.15s;
-}
-
-.typing-dots span:nth-child(3) {
-  animation-delay: 0.3s;
-}
+.typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.3s; }
 
 @keyframes typingBounce {
-  0%, 60%, 100% {
-    transform: translateY(0);
-    opacity: 0.4;
-  }
-  30% {
-    transform: translateY(-6px);
-    opacity: 1;
-  }
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-6px); opacity: 1; }
 }
 
 /* Input Area */
@@ -610,14 +714,8 @@ onUnmounted(() => {
   -webkit-tap-highlight-color: transparent;
 }
 
-.input-action:active {
-  background: var(--fill-tertiary);
-}
-
-.input-action svg {
-  width: 24px;
-  height: 24px;
-}
+.input-action:active { background: var(--fill-tertiary); }
+.input-action svg { width: 24px; height: 24px; }
 
 .text-input-wrap {
   flex: 1;
@@ -642,9 +740,7 @@ onUnmounted(() => {
   font-family: inherit;
 }
 
-.text-input::placeholder {
-  color: var(--text-quaternary);
-}
+.text-input::placeholder { color: var(--text-quaternary); }
 
 .send-btn {
   width: 36px;
@@ -665,21 +761,11 @@ onUnmounted(() => {
 .send-btn.active {
   background: var(--brand-primary, #007aff);
   color: white;
-  transform: scale(1);
 }
 
-.send-btn:disabled {
-  opacity: 0.5;
-}
-
-.send-btn:active.active:not(:disabled) {
-  transform: scale(0.9);
-}
-
-.send-btn svg {
-  width: 20px;
-  height: 20px;
-}
+.send-btn:disabled { opacity: 0.5; }
+.send-btn:active.active:not(:disabled) { transform: scale(0.9); }
+.send-btn svg { width: 20px; height: 20px; }
 
 .icon-btn {
   width: 32px;
@@ -694,22 +780,111 @@ onUnmounted(() => {
   -webkit-tap-highlight-color: transparent;
 }
 
-.icon-btn:active {
-  opacity: 0.5;
+.icon-btn:active { opacity: 0.5; }
+.icon-btn svg { width: 22px; height: 22px; }
+
+/* Info Panel */
+.info-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
 }
 
-.icon-btn svg {
-  width: 22px;
-  height: 22px;
+.info-panel {
+  width: 100%;
+  max-width: 393px;
+  max-height: 70%;
+  background: var(--bg-primary);
+  border-radius: 20px 20px 0 0;
+  display: flex;
+  flex-direction: column;
 }
+
+.info-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--separator);
+}
+
+.info-header h3 {
+  margin: 0;
+  font-size: 17px;
+  color: var(--text-primary);
+}
+
+.close-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 14px;
+  background: var(--bg-tertiary, var(--fill-tertiary));
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  border: none;
+}
+
+.info-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.info-section {
+  margin-bottom: 16px;
+}
+
+.info-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.info-value {
+  font-size: 15px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.info-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.info-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.info-action-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  background: var(--fill-tertiary);
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.info-action-btn:active { opacity: 0.7; }
 
 /* Message transition */
-.msg-enter-active {
-  transition: all 0.3s var(--ease-ios);
-}
-
-.msg-enter-from {
-  opacity: 0;
-  transform: translateY(10px);
-}
+.msg-enter-active { transition: all 0.3s var(--ease-ios); }
+.msg-enter-from { opacity: 0; transform: translateY(10px); }
 </style>

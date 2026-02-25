@@ -1,47 +1,58 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { api } from '@/api/client'
+import { getCharacterById } from '@/utils/aiService'
+import type { CharacterData } from '@/utils/aiService'
 
 export interface Character {
-  id: number
+  id: string
+  type?: string
   name: string
-  avatar_url: string
-  description: string
-  personality: string
-  system_prompt: string
-  greeting: string
-  is_public: boolean
-  tags: string[]
+  avatar?: string
+  avatar_url?: string
+  description?: string
+  persona?: string
+  scenario?: string
+  firstMessage?: string
+  exampleDialogue?: string
+  worldBooks?: string[]
+  personality?: string
+  system_prompt?: string
+  greeting?: string
+  is_public?: boolean
+  tags?: string[]
 }
 
 export interface Conversation {
-  id: number
-  character_id: number
+  id: string
+  characterId: string
   title: string
   is_group: boolean
   last_message: string
   last_at: string
-  character?: Character
-  // Local fields
+  character?: Character | null
   unread?: number
+  createdAt: string
 }
 
 export interface ChatMessage {
-  id: number
-  conversation_id: number
+  id: string
+  conversation_id: string
   role: 'user' | 'assistant' | 'system'
   content: string
-  msg_type: 'text' | 'image' | 'emoji' | 'redpacket' | 'transfer' | 'share'
+  msg_type: string
   extra: Record<string, unknown>
   created_at: string
+  timestamp: number
 }
+
+const CONV_STORAGE_KEY = 'chat-conversations'
 
 export const useChatStore = defineStore('chat', () => {
   // State
   const conversations = ref<Conversation[]>([])
   const characters = ref<Character[]>([])
   const currentMessages = ref<ChatMessage[]>([])
-  const currentConversationId = ref<number | null>(null)
+  const currentConversationId = ref<string | null>(null)
   const loading = ref(false)
 
   // Getters
@@ -52,136 +63,202 @@ export const useChatStore = defineStore('chat', () => {
   })
 
   const currentConversation = computed(() => {
-    return conversations.value.find(c => c.id === currentConversationId.value)
+    return conversations.value.find(c => c.id === currentConversationId.value) || null
   })
 
-  // Actions
-  async function fetchConversations() {
+  // localStorage helpers
+  function loadConversations() {
     try {
-      const res = await api.get<{ data: Conversation[] }>('/api/conversations')
-      conversations.value = res.data || []
-    } catch (e) {
-      console.error('Failed to fetch conversations:', e)
+      const saved = localStorage.getItem(CONV_STORAGE_KEY)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed)) {
+          conversations.value = parsed
+          // 恢复角色信息
+          for (const conv of conversations.value) {
+            if (conv.characterId && !conv.character) {
+              const char = getCharacterById(conv.characterId)
+              if (char) {
+                conv.character = char as Character
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore
     }
   }
 
-  async function fetchCharacters() {
+  function saveConversations() {
     try {
-      const res = await api.get<{ data: Character[] }>('/api/characters')
-      characters.value = res.data || []
-    } catch (e) {
-      console.error('Failed to fetch characters:', e)
+      // 保存时不保存完整角色对象，只保存 characterId
+      const toSave = conversations.value.map(c => ({
+        ...c,
+        character: c.character ? {
+          id: c.character.id,
+          name: c.character.name,
+          avatar: c.character.avatar || c.character.avatar_url,
+          description: c.character.description,
+        } : null,
+      }))
+      localStorage.setItem(CONV_STORAGE_KEY, JSON.stringify(toSave))
+    } catch {
+      // ignore
     }
   }
 
-  async function fetchMessages(conversationId: number) {
+  function loadMessages(conversationId: string) {
     currentConversationId.value = conversationId
     try {
-      const res = await api.get<{ data: ChatMessage[] }>(`/api/conversations/${conversationId}/messages`)
-      currentMessages.value = res.data || []
-    } catch (e) {
-      console.error('Failed to fetch messages:', e)
-    }
-  }
-
-  async function sendMessage(conversationId: number, content: string, msgType = 'text') {
-    const tempMsg: ChatMessage = {
-      id: Date.now(),
-      conversation_id: conversationId,
-      role: 'user',
-      content,
-      msg_type: msgType as ChatMessage['msg_type'],
-      extra: {},
-      created_at: new Date().toISOString(),
-    }
-    currentMessages.value.push(tempMsg)
-
-    // Update conversation preview
-    const conv = conversations.value.find(c => c.id === conversationId)
-    if (conv) {
-      conv.last_message = content
-      conv.last_at = tempMsg.created_at
-    }
-
-    try {
-      await api.post(`/api/conversations/${conversationId}/messages`, {
-        content,
-        msg_type: msgType,
-      })
-    } catch (e) {
-      console.error('Failed to send message:', e)
-    }
-  }
-
-  async function createConversation(characterId: number): Promise<Conversation | null> {
-    try {
-      const res = await api.post<Conversation>('/api/conversations', {
-        character_id: characterId,
-      })
-      if (res) {
-        conversations.value.unshift(res)
-        return res
-      }
-    } catch (e) {
-      console.error('Failed to create conversation:', e)
-    }
-    return null
-  }
-
-  async function deleteConversation(id: number) {
-    try {
-      await api.delete(`/api/conversations/${id}`)
-      conversations.value = conversations.value.filter(c => c.id !== id)
-      if (currentConversationId.value === id) {
-        currentConversationId.value = null
+      const key = `chat-messages-${conversationId}`
+      const saved = localStorage.getItem(key)
+      if (saved) {
+        currentMessages.value = JSON.parse(saved)
+      } else {
         currentMessages.value = []
       }
-    } catch (e) {
-      console.error('Failed to delete conversation:', e)
+    } catch {
+      currentMessages.value = []
     }
   }
 
-  async function createCharacter(data: Partial<Character>): Promise<Character | null> {
+  function saveMessages(conversationId: string) {
     try {
-      const res = await api.post<Character>('/api/characters', data)
-      if (res) {
-        characters.value.push(res)
-        return res
+      const key = `chat-messages-${conversationId}`
+      // 只保留最近200条
+      const toSave = currentMessages.value.slice(-200)
+      localStorage.setItem(key, JSON.stringify(toSave))
+    } catch {
+      // ignore
+    }
+  }
+
+  // Actions
+  function fetchConversations() {
+    loadConversations()
+  }
+
+  function fetchCharacters() {
+    try {
+      const saved = localStorage.getItem('characters')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed)) {
+          characters.value = parsed.filter((c: any) => c.type === 'char')
+        }
       }
-    } catch (e) {
-      console.error('Failed to create character:', e)
-    }
-    return null
-  }
-
-  async function updateCharacter(id: number, data: Partial<Character>) {
-    try {
-      await api.put(`/api/characters/${id}`, data)
-      const idx = characters.value.findIndex(c => c.id === id)
-      if (idx !== -1) {
-        characters.value[idx] = { ...characters.value[idx], ...data } as Character
-      }
-    } catch (e) {
-      console.error('Failed to update character:', e)
+    } catch {
+      // ignore
     }
   }
 
-  async function deleteCharacter(id: number) {
-    try {
-      await api.delete(`/api/characters/${id}`)
-      characters.value = characters.value.filter(c => c.id !== id)
-    } catch (e) {
-      console.error('Failed to delete character:', e)
-    }
+  function fetchMessages(conversationId: string | number) {
+    loadMessages(String(conversationId))
   }
 
-  function addLocalMessage(msg: ChatMessage) {
+  function addMessage(conversationId: string, role: 'user' | 'assistant', content: string): ChatMessage {
+    const msg: ChatMessage = {
+      id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      conversation_id: conversationId,
+      role,
+      content,
+      msg_type: 'text',
+      extra: {},
+      created_at: new Date().toISOString(),
+      timestamp: Date.now(),
+    }
     currentMessages.value.push(msg)
+    saveMessages(conversationId)
+
+    // 更新会话预览
+    const conv = conversations.value.find(c => c.id === conversationId)
+    if (conv) {
+      conv.last_message = content.slice(0, 50)
+      conv.last_at = msg.created_at
+      saveConversations()
+    }
+
+    return msg
+  }
+
+  function sendMessage(conversationId: string | number, content: string) {
+    addMessage(String(conversationId), 'user', content)
+  }
+
+  function createConversation(characterId: string | number): Conversation {
+    const charIdStr = String(characterId)
+    
+    // 检查是否已有该角色的会话
+    const existing = conversations.value.find(c => c.characterId === charIdStr)
+    if (existing) {
+      return existing
+    }
+
+    // 获取角色信息
+    const char = getCharacterById(charIdStr)
+    const charName = char?.name || '未命名角色'
+
+    const conv: Conversation = {
+      id: `conv-${Date.now()}`,
+      characterId: charIdStr,
+      title: charName,
+      is_group: false,
+      last_message: char?.firstMessage || '开始聊天吧~',
+      last_at: new Date().toISOString(),
+      character: char as Character | null,
+      unread: 0,
+      createdAt: new Date().toISOString(),
+    }
+
+    conversations.value.unshift(conv)
+    saveConversations()
+
+    // 如果角色有开场白，保存为第一条消息
+    if (char?.firstMessage) {
+      currentConversationId.value = conv.id
+      currentMessages.value = []
+      addMessage(conv.id, 'assistant', char.firstMessage)
+    }
+
+    return conv
+  }
+
+  function deleteConversation(id: string | number) {
+    const idStr = String(id)
+    conversations.value = conversations.value.filter(c => c.id !== idStr)
+    saveConversations()
+
+    // 删除消息
+    try {
+      localStorage.removeItem(`chat-messages-${idStr}`)
+    } catch {
+      // ignore
+    }
+
+    if (currentConversationId.value === idStr) {
+      currentConversationId.value = null
+      currentMessages.value = []
+    }
   }
 
   function clearCurrentChat() {
     currentConversationId.value = null
     currentMessages.value = []
+  }
+
+  // 刷新会话中的角色信息
+  function refreshConversationCharacters() {
+    for (const conv of conversations.value) {
+      if (conv.characterId) {
+        const char = getCharacterById(conv.characterId)
+        if (char) {
+          conv.character = char as Character
+          conv.title = char.name || conv.title
+        }
+      }
+    }
+    saveConversations()
   }
 
   return {
@@ -199,12 +276,13 @@ export const useChatStore = defineStore('chat', () => {
     fetchCharacters,
     fetchMessages,
     sendMessage,
+    addMessage,
     createConversation,
     deleteConversation,
-    createCharacter,
-    updateCharacter,
-    deleteCharacter,
-    addLocalMessage,
     clearCurrentChat,
+    refreshConversationCharacters,
+    loadMessages,
+    saveMessages,
+    saveConversations,
   }
 })
