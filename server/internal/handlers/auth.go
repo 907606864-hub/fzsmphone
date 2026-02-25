@@ -111,7 +111,7 @@ func (h *AuthHandler) DiscordCallback(w http.ResponseWriter, r *http.Request) {
 	if h.Cfg.DiscordGuildID != "" {
 		failMsg := h.Cfg.DiscordAuthFailMessage
 
-		member, err := h.getGuildMember(dUser.ID)
+		member, err := h.getGuildMember(dUser.ID, tokenResp.AccessToken)
 		if err != nil {
 			log.Printf("[WARN] Guild member lookup failed for user %s (%s): %v", dUser.Username, dUser.ID, err)
 			mw.Error(w, http.StatusForbidden, failMsg)
@@ -196,41 +196,75 @@ func (h *AuthHandler) DiscordCallback(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// getGuildMember retrieves a guild member using the Bot token.
-// Returns nil if the user is not a member (404).
-func (h *AuthHandler) getGuildMember(discordUserID string) (*discordGuildMember, error) {
-	if h.Cfg.DiscordBotToken == "" {
-		return nil, fmt.Errorf("DISCORD_BOT_TOKEN is required for guild verification")
+// getGuildMember retrieves guild member info to check membership and roles.
+// Tries two methods:
+//  1. User OAuth token: GET /users/@me/guilds/{guild_id}/member (需要 guilds.members.read scope，无需 Bot)
+//  2. Bot token fallback: GET /guilds/{guild_id}/members/{user_id} (需要 Bot 在服务器中)
+//
+// Returns nil if the user is not a member.
+func (h *AuthHandler) getGuildMember(discordUserID string, userAccessToken string) (*discordGuildMember, error) {
+	// 方法一：使用用户的 OAuth token（无需 Bot）
+	{
+		apiURL := fmt.Sprintf("https://discord.com/api/v10/users/@me/guilds/%s/member", h.Cfg.DiscordGuildID)
+		req, err := http.NewRequest("GET", apiURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("create request: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+userAccessToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("user token API request: %w", err)
+		}
+		defer resp.Body.Close()
+
+		switch resp.StatusCode {
+		case 200:
+			var member discordGuildMember
+			if err := json.NewDecoder(resp.Body).Decode(&member); err != nil {
+				return nil, fmt.Errorf("parse member: %w", err)
+			}
+			return &member, nil
+		case 404:
+			return nil, nil // 不是服务器成员
+		default:
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			log.Printf("[WARN] User token guild member check returned %d: %s", resp.StatusCode, string(bodyBytes))
+			// 继续尝试方法二
+		}
 	}
 
-	apiURL := fmt.Sprintf("https://discord.com/api/v10/guilds/%s/members/%s", h.Cfg.DiscordGuildID, discordUserID)
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bot "+h.Cfg.DiscordBotToken)
+	// 方法二：使用 Bot token（可选回退）
+	if h.Cfg.DiscordBotToken != "" {
+		apiURL := fmt.Sprintf("https://discord.com/api/v10/guilds/%s/members/%s", h.Cfg.DiscordGuildID, discordUserID)
+		req, err := http.NewRequest("GET", apiURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("create bot request: %w", err)
+		}
+		req.Header.Set("Authorization", "Bot "+h.Cfg.DiscordBotToken)
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("bot API request: %w", err)
-	}
-	defer resp.Body.Close()
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("bot API request: %w", err)
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode == 404 {
-		return nil, nil // Not a member
+		switch resp.StatusCode {
+		case 200:
+			var member discordGuildMember
+			if err := json.NewDecoder(resp.Body).Decode(&member); err != nil {
+				return nil, fmt.Errorf("parse member: %w", err)
+			}
+			return &member, nil
+		case 404:
+			return nil, nil
+		default:
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("bot API returned %d: %s", resp.StatusCode, string(bodyBytes))
+		}
 	}
 
-	if resp.StatusCode != 200 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("Discord API returned %d: %s", resp.StatusCode, string(bodyBytes))
-	}
-
-	var member discordGuildMember
-	if err := json.NewDecoder(resp.Body).Decode(&member); err != nil {
-		return nil, fmt.Errorf("parse member: %w", err)
-	}
-
-	return &member, nil
+	return nil, fmt.Errorf("无法验证服务器成员身份")
 }
 
 // checkRoles verifies the member has the required Discord roles.

@@ -25,7 +25,7 @@ function loginWithDiscord() {
     client_id: DISCORD_CLIENT_ID,
     redirect_uri: REDIRECT_URI,
     response_type: 'code',
-    scope: 'identify email guilds',
+    scope: 'identify email guilds guilds.members.read',
   })
   window.location.href = `https://discord.com/api/oauth2/authorize?${params.toString()}`
 }
