@@ -35,12 +35,17 @@ const STORAGE_KEYS = {
 // ==================== AI配置读取 ====================
 function getAIConfig() {
   try {
-    const apiKey = localStorage.getItem('apiKey') || ''
-    const apiUrl = localStorage.getItem('apiUrl') || ''
-    const model = localStorage.getItem('modelName') || ''
-    const maxTokens = parseInt(localStorage.getItem('maxTokens') || '2000')
-    const temperature = parseFloat(localStorage.getItem('temperature') || '0.9')
-    return { apiKey, apiUrl, model, maxTokens, temperature }
+    const saved = localStorage.getItem('fzsm-settings')
+    if (saved) {
+      const s = JSON.parse(saved)
+      const apiKey = s.apiKey || ''
+      const apiUrl = s.apiUrl === 'custom' ? (s.customApiUrl || '') : (s.apiUrl || '')
+      const model = s.model || ''
+      const maxTokens = s.maxLength || 2000
+      const temperature = s.temperature ?? 0.9
+      return { apiKey, apiUrl, model, maxTokens, temperature }
+    }
+    return { apiKey: '', apiUrl: '', model: '', maxTokens: 2000, temperature: 0.9 }
   } catch {
     return { apiKey: '', apiUrl: '', model: '', maxTokens: 2000, temperature: 0.9 }
   }
