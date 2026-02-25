@@ -42,6 +42,7 @@ func New(cfg *config.Config, db *database.DB, hub *ws.Hub) http.Handler {
 	personaH := &handlers.PersonaHandler{DB: db}
 	wbookH := &handlers.WorldBookHandler{DB: db}
 	settingsH := &handlers.SettingsHandler{DB: db}
+	featuresH := &handlers.FeaturesHandler{DB: db}
 	restH := &handlers.RestaurantHandler{DB: db}
 	orderH := &handlers.OrderHandler{DB: db}
 
@@ -151,6 +152,12 @@ func New(cfg *config.Config, db *database.DB, hub *ws.Hub) http.Handler {
 			r.Route("/settings", func(r chi.Router) {
 				r.Get("/", settingsH.Get)
 				r.Put("/", settingsH.Update)
+			})
+
+			// === Feature Flags ===
+			r.Route("/features", func(r chi.Router) {
+				r.Get("/", featuresH.Get)
+				r.Put("/", featuresH.Update)
 			})
 
 			// === Users ===

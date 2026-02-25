@@ -52,17 +52,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useFeaturesStore } from '@/stores/features'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const featuresStore = useFeaturesStore()
+const authStore = useAuthStore()
 
 interface AppItem {
   name: string
   icon: string
   color: string
   route: string
+  featureId?: string // maps to feature flag ID
   badge?: number
+  adminOnly?: boolean
 }
 
 const dateStr = ref('')
@@ -80,35 +86,52 @@ function updateDateTime() {
   })
 }
 
-const apps: AppItem[] = [
-  { name: '聊天', icon: '💬', color: 'linear-gradient(135deg, #5B6EF5, #8B5CF6)', route: '/friends' },
-  { name: '论坛', icon: '📋', color: 'linear-gradient(135deg, #FF6B35, #F7931E)', route: '/forum' },
-  { name: '微博', icon: '🔥', color: 'linear-gradient(135deg, #E6162D, #FF4757)', route: '/weibo' },
-  { name: '朋友圈', icon: '🌈', color: 'linear-gradient(135deg, #2ED573, #7BED9F)', route: '/qzone' },
-  { name: '外卖', icon: '🛵', color: 'linear-gradient(135deg, #0AB4FF, #26D0CE)', route: '/takeaway' },
-  { name: '购物', icon: '🛍️', color: 'linear-gradient(135deg, #FF6348, #FF4757)', route: '/shopping' },
-  { name: '音乐', icon: '🎵', color: 'linear-gradient(135deg, #FC5C7D, #6A82FB)', route: '/listen-together' },
-  { name: '直播', icon: '📺', color: 'linear-gradient(135deg, #A855F7, #EC4899)', route: '/live' },
-  { name: '日记', icon: '📖', color: 'linear-gradient(135deg, #FECA57, #FF9FF3)', route: '/diary' },
-  { name: '游戏', icon: '🎮', color: 'linear-gradient(135deg, #6C5CE7, #A29BFE)', route: '/games' },
-  { name: '钱包', icon: '💰', color: 'linear-gradient(135deg, #00B894, #55EFC4)', route: '/wallet' },
-  { name: '影院', icon: '🎬', color: 'linear-gradient(135deg, #2D3436, #636E72)', route: '/mini-theater' },
-  { name: '股票', icon: '📈', color: 'linear-gradient(135deg, #00B16A, #1ABC9C)', route: '/stock' },
-  { name: '汇率', icon: '💱', color: 'linear-gradient(135deg, #3498DB, #2980B9)', route: '/currency' },
-  { name: '情侣', icon: '💕', color: 'linear-gradient(135deg, #FD79A8, #E84393)', route: '/couple-space' },
-  { name: '设置', icon: '⚙️', color: 'linear-gradient(135deg, #636E72, #B2BEC3)', route: '/customize' },
-  { name: '角色', icon: '👥', color: 'linear-gradient(135deg, #00CEC9, #81ECEC)', route: '/characters' },
-  { name: '人设', icon: '🎭', color: 'linear-gradient(135deg, #E17055, #FAB1A0)', route: '/personas' },
-  { name: '世界书', icon: '📚', color: 'linear-gradient(135deg, #6C5CE7, #DDA0DD)', route: '/worldbook' },
-  { name: '预设', icon: '⚡', color: 'linear-gradient(135deg, #FDCB6E, #F39C12)', route: '/preset' },
+const allApps: AppItem[] = [
+  { name: '聊天', icon: '💬', color: 'linear-gradient(135deg, #5B6EF5, #8B5CF6)', route: '/friends', featureId: 'chat' },
+  { name: '论坛', icon: '📋', color: 'linear-gradient(135deg, #FF6B35, #F7931E)', route: '/forum', featureId: 'forum' },
+  { name: '微博', icon: '🔥', color: 'linear-gradient(135deg, #E6162D, #FF4757)', route: '/weibo', featureId: 'weibo' },
+  { name: '朋友圈', icon: '🌈', color: 'linear-gradient(135deg, #2ED573, #7BED9F)', route: '/qzone', featureId: 'qzone' },
+  { name: '外卖', icon: '🛵', color: 'linear-gradient(135deg, #0AB4FF, #26D0CE)', route: '/takeaway', featureId: 'takeaway' },
+  { name: '购物', icon: '🛍️', color: 'linear-gradient(135deg, #FF6348, #FF4757)', route: '/shopping', featureId: 'shopping' },
+  { name: '音乐', icon: '🎵', color: 'linear-gradient(135deg, #FC5C7D, #6A82FB)', route: '/listen-together', featureId: 'music' },
+  { name: '直播', icon: '📺', color: 'linear-gradient(135deg, #A855F7, #EC4899)', route: '/live', featureId: 'live' },
+  { name: '日记', icon: '📖', color: 'linear-gradient(135deg, #FECA57, #FF9FF3)', route: '/diary', featureId: 'diary' },
+  { name: '游戏', icon: '🎮', color: 'linear-gradient(135deg, #6C5CE7, #A29BFE)', route: '/games', featureId: 'games' },
+  { name: '钱包', icon: '💰', color: 'linear-gradient(135deg, #00B894, #55EFC4)', route: '/wallet', featureId: 'wallet' },
+  { name: '影院', icon: '🎬', color: 'linear-gradient(135deg, #2D3436, #636E72)', route: '/mini-theater', featureId: 'mini_theater' },
+  { name: '股票', icon: '📈', color: 'linear-gradient(135deg, #00B16A, #1ABC9C)', route: '/stock', featureId: 'stock' },
+  { name: '汇率', icon: '💱', color: 'linear-gradient(135deg, #3498DB, #2980B9)', route: '/currency', featureId: 'currency' },
+  { name: '情侣', icon: '💕', color: 'linear-gradient(135deg, #FD79A8, #E84393)', route: '/couple-space', featureId: 'couple_space' },
+  { name: '设置', icon: '⚙️', color: 'linear-gradient(135deg, #636E72, #B2BEC3)', route: '/customize' }, // always visible
+  { name: '角色', icon: '👥', color: 'linear-gradient(135deg, #00CEC9, #81ECEC)', route: '/characters', featureId: 'characters' },
+  { name: '人设', icon: '🎭', color: 'linear-gradient(135deg, #E17055, #FAB1A0)', route: '/personas', featureId: 'personas' },
+  { name: '世界书', icon: '📚', color: 'linear-gradient(135deg, #6C5CE7, #DDA0DD)', route: '/worldbook', featureId: 'worldbook' },
+  { name: '预设', icon: '⚡', color: 'linear-gradient(135deg, #FDCB6E, #F39C12)', route: '/preset', featureId: 'preset' },
+  { name: '管理', icon: '🛡️', color: 'linear-gradient(135deg, #E74C3C, #C0392B)', route: '/admin/features', adminOnly: true },
 ]
 
-const dockApps: AppItem[] = [
-  { name: '电话', icon: '📞', color: 'linear-gradient(135deg, #2ED573, #7BED9F)', route: '/phone' },
-  { name: '短信', icon: '✉️', color: 'linear-gradient(135deg, #2ED573, #7BED9F)', route: '/sms' },
-  { name: '聊天', icon: '💬', color: 'linear-gradient(135deg, #5B6EF5, #8B5CF6)', route: '/friends' },
-  { name: '个人', icon: '👤', color: 'linear-gradient(135deg, #636E72, #B2BEC3)', route: '/profile' },
+// Filter apps: hide disabled features + admin-only for non-admins
+const apps = computed(() =>
+  allApps.filter((app) => {
+    if (app.adminOnly && !authStore.isAdmin) return false
+    if (app.featureId && !featuresStore.isEnabled(app.featureId)) return false
+    return true
+  }),
+)
+
+const allDockApps: AppItem[] = [
+  { name: '电话', icon: '📞', color: 'linear-gradient(135deg, #2ED573, #7BED9F)', route: '/phone', featureId: 'phone' },
+  { name: '短信', icon: '✉️', color: 'linear-gradient(135deg, #2ED573, #7BED9F)', route: '/sms', featureId: 'sms' },
+  { name: '聊天', icon: '💬', color: 'linear-gradient(135deg, #5B6EF5, #8B5CF6)', route: '/friends', featureId: 'chat' },
+  { name: '个人', icon: '👤', color: 'linear-gradient(135deg, #636E72, #B2BEC3)', route: '/profile' }, // always visible
 ]
+
+const dockApps = computed(() =>
+  allDockApps.filter((app) => {
+    if (app.featureId && !featuresStore.isEnabled(app.featureId)) return false
+    return true
+  }),
+)
 
 function openApp(app: AppItem) {
   router.push(app.route)
@@ -117,6 +140,7 @@ function openApp(app: AppItem) {
 onMounted(() => {
   updateDateTime()
   timer = setInterval(updateDateTime, 1000)
+  featuresStore.fetchFeatures()
 })
 
 onUnmounted(() => {

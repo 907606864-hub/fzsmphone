@@ -1,5 +1,43 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
+// Route name -> featureId mapping for feature gating
+const routeFeatureMap: Record<string, string> = {
+  Friends: 'chat',
+  Chat: 'chat',
+  GroupChat: 'chat',
+  Characters: 'characters',
+  CharacterEdit: 'characters',
+  UserPersonas: 'personas',
+  WorldBook: 'worldbook',
+  Forum: 'forum',
+  PostDetail: 'forum',
+  Weibo: 'weibo',
+  QZone: 'qzone',
+  Moments: 'qzone',
+  CoupleSpace: 'couple_space',
+  Takeaway: 'takeaway',
+  Restaurant: 'takeaway',
+  TakeawayOrders: 'takeaway',
+  Shopping: 'shopping',
+  Wallet: 'wallet',
+  ListenTogether: 'music',
+  Live: 'live',
+  Games: 'games',
+  Casino: 'casino',
+  MiniTheater: 'mini_theater',
+  Diary: 'diary',
+  Phone: 'phone',
+  Sms: 'sms',
+  Stock: 'stock',
+  CurrencyConverter: 'currency',
+  VoiceCall: 'voice_call',
+  VideoCall: 'video_call',
+  PhonePeek: 'phone_peek',
+  ReversePhonePeek: 'reverse_phone_peek',
+  OfflineDate: 'offline_date',
+  Preset: 'preset',
+}
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
@@ -204,6 +242,13 @@ const routes: RouteRecordRaw[] = [
     name: 'OfflineDate',
     component: () => import('@/pages/tools/OfflineDatePage.vue'),
   },
+  // === Admin ===
+  {
+    path: '/admin/features',
+    name: 'AdminFeatures',
+    component: () => import('@/pages/admin/FeatureManagePage.vue'),
+    meta: { admin: true },
+  },
 ]
 
 const router = createRouter({
@@ -239,6 +284,20 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   if (to.path === '/login' && token) return next('/')
+
+  // Feature gating: block access to disabled features
+  const routeName = to.name as string
+  if (routeName && routeFeatureMap[routeName]) {
+    const { useFeaturesStore } = await import('@/stores/features')
+    const featuresStore = useFeaturesStore()
+    // Ensure features are loaded
+    if (!featuresStore.loaded) {
+      await featuresStore.fetchFeatures()
+    }
+    if (!featuresStore.isEnabled(routeFeatureMap[routeName])) {
+      return next('/')
+    }
+  }
 
   next()
 })
