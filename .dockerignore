@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+.env
+.env.local
+*.md
+.vscode
+.idea
+docker-compose.yml

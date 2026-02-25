@@ -172,7 +172,7 @@ func New(cfg *config.Config, db *database.DB, hub *ws.Hub) http.Handler {
 
 	// Serve frontend static files in production
 	if !cfg.IsDev() {
-		fileServer(r, "../dist")
+		fileServer(r, "./dist")
 	}
 
 	return r
