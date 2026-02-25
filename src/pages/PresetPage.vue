@@ -162,9 +162,17 @@
             <div class="form-hint">此内容将作为系统提示词的一部分发送给AI，与角色设定、世界书等合并</div>
           </div>
           <div class="form-group">
-            <label>预填充 (prefill)</label>
-            <textarea v-model="form.prefill" rows="3" placeholder="（可选）AI回复的预填充内容，用于引导AI的回复风格&#10;例如：好的，我来扮演这个角色。"></textarea>
-            <div class="form-hint">预填充内容会作为assistant消息的开头，引导AI按特定风格回复</div>
+            <div class="prefill-header">
+              <label>预填充 (prefill)</label>
+              <div class="toggle-switch" :class="{ active: form.enablePrefill }" @click="form.enablePrefill = !form.enablePrefill">
+                <div class="toggle-knob"></div>
+              </div>
+            </div>
+            <template v-if="form.enablePrefill">
+              <textarea v-model="form.prefill" rows="3" placeholder="（可选）AI回复的预填充内容，用于引导AI的回复风格&#10;例如：好的，我来扮演这个角色。"></textarea>
+              <div class="form-hint">⚠️ 预填充会在消息末尾添加 assistant 消息，部分模型不支持（如某些 OpenAI 兼容 API），可能导致 400 错误。仅在确认模型支持时开启。</div>
+            </template>
+            <div v-else class="form-hint">预填充已关闭。开启后可引导AI按特定风格开头回复（需模型支持 assistant prefill）</div>
           </div>
         </div>
         <div class="editor-footer">
@@ -194,6 +202,7 @@ interface Preset {
   shortDesc: string
   content: string     // 系统提示词内容
   prefill: string     // 预填充
+  enablePrefill: boolean  // 是否启用预填充
   gradient: string
   updatedAt: string
   createdAt: string
@@ -230,6 +239,7 @@ const form = ref({
   description: '',
   content: '',
   prefill: '',
+  enablePrefill: false,
 })
 
 // 内置预设
@@ -257,6 +267,7 @@ Character will never break immersion.
 7. 每次回复控制在合理长度，不要过长
 8. 可以使用 *动作描写* 来增强表现力`,
     prefill: '',
+    enablePrefill: false,
     gradient: 'linear-gradient(135deg, #667eea, #764ba2)',
     updatedAt: '',
     createdAt: '',
@@ -280,6 +291,7 @@ Character will never break immersion.
 6. 回复不要太长，保持聊天的轻松感
 7. 永远不要打破角色`,
     prefill: '',
+    enablePrefill: false,
     gradient: 'linear-gradient(135deg, #ff9a9e, #fecfef)',
     updatedAt: '',
     createdAt: '',
@@ -303,6 +315,7 @@ Character will never break immersion.
 6. 每次续写控制在合理篇幅
 7. 可以适当使用修辞手法增强表现力`,
     prefill: '',
+    enablePrefill: false,
     gradient: 'linear-gradient(135deg, #a18cd1, #fbc2eb)',
     updatedAt: '',
     createdAt: '',
@@ -326,6 +339,7 @@ Character will never break immersion.
 6. 动作描写加入猫的习性（如蹭蹭、竖起耳朵、摇尾巴等）
 7. 保持角色的可爱和天真感`,
     prefill: '',
+    enablePrefill: false,
     gradient: 'linear-gradient(135deg, #fa709a, #fee140)',
     updatedAt: '',
     createdAt: '',
@@ -419,6 +433,7 @@ function openEditor(preset: Preset | null) {
       description: preset.description,
       content: preset.content,
       prefill: preset.prefill || '',
+      enablePrefill: preset.enablePrefill || false,
     }
   } else {
     form.value = {
@@ -428,6 +443,7 @@ function openEditor(preset: Preset | null) {
       description: '',
       content: '',
       prefill: '',
+      enablePrefill: false,
     }
   }
   showEditor.value = true
@@ -451,6 +467,7 @@ function savePreset() {
         shortDesc: form.value.description.slice(0, 20),
         content: form.value.content,
         prefill: form.value.prefill,
+        enablePrefill: form.value.enablePrefill,
         updatedAt: dateStr,
       }
     }
@@ -464,6 +481,7 @@ function savePreset() {
       shortDesc: form.value.description.slice(0, 20),
       content: form.value.content,
       prefill: form.value.prefill,
+      enablePrefill: form.value.enablePrefill,
       gradient: 'linear-gradient(135deg, #667eea, #764ba2)',
       updatedAt: dateStr,
       createdAt: now.toISOString(),
@@ -555,6 +573,7 @@ function handleImport(e: Event) {
         shortDesc: (data.description || '').slice(0, 20),
         content: data.content,
         prefill: data.prefill || '',
+        enablePrefill: data.enablePrefill || false,
         gradient: 'linear-gradient(135deg, #667eea, #764ba2)',
         updatedAt: formatDateStr(now),
         createdAt: now.toISOString(),
@@ -1025,6 +1044,50 @@ onMounted(() => {
   color: var(--text-tertiary);
   margin-top: 4px;
   line-height: 1.4;
+}
+
+.prefill-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.prefill-header label {
+  margin-bottom: 0 !important;
+}
+
+.toggle-switch {
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  cursor: pointer;
+  position: relative;
+  transition: all 0.3s;
+  flex-shrink: 0;
+}
+
+.toggle-switch.active {
+  background: #34c759;
+  border-color: #34c759;
+}
+
+.toggle-knob {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  transition: transform 0.3s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-switch.active .toggle-knob {
+  transform: translateX(20px);
 }
 
 .emoji-picker {

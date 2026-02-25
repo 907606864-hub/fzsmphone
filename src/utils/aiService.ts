@@ -57,6 +57,7 @@ export interface PresetData {
   name?: string
   content?: string   // 系统提示词
   prefill?: string   // 预填充
+  enablePrefill?: boolean  // 是否启用预填充（默认关闭）
 }
 
 // 世界书条目
@@ -530,8 +531,8 @@ export function buildFullMessages(
     msgs.push({ role: m.role, content: m.content })
   }
 
-  // 如果预设有 prefill，添加为 assistant 消息的开头引导
-  if (preset?.prefill) {
+  // 如果预设启用了预填充且有 prefill 内容，添加为 assistant 消息的开头引导
+  if (preset?.enablePrefill && preset?.prefill) {
     msgs.push({ role: 'assistant', content: preset.prefill })
   }
 
