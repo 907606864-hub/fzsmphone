@@ -17,7 +17,6 @@ ENV VITE_DISCORD_CLIENT_ID=${VITE_DISCORD_CLIENT_ID}
 
 COPY index.html tsconfig.json tsconfig.node.json vite.config.ts env.d.ts ./
 COPY src/ ./src/
-COPY public/ ./public/
 RUN npm run build
 
 # ---- Stage 2: Build Backend ----
