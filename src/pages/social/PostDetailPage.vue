@@ -231,7 +231,8 @@ async function submitReply() {
 async function handleRefresh() {
   if (!thread.value) return
   try {
-    await store.forumReply(threadId.value, '')
+    const action = `请为帖子"${thread.value.title}"（作者：${thread.value.author}）生成更多回复和互动。当前已有${thread.value.replies.length}条回复。请生成新的回复内容，包括楼中楼讨论。`
+    await store.generateForumContent(action)
   } catch (e: any) {
     errorMsg.value = e.message || '刷新失败'
     setTimeout(() => { errorMsg.value = '' }, 3000)
