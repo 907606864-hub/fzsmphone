@@ -174,12 +174,21 @@ function preprocessContent(content: string): string {
  * 提取标记区域内容，如果标记不存在则返回整个文本
  */
 function extractMarkedContent(content: string, startMarker: string, endMarker: string): string {
-  const regex = new RegExp(`${escapeRegex(startMarker)}([\\s\\S]*?)${escapeRegex(endMarker)}`)
-  const match = content.match(regex)
-  if (match) {
-    return match[1]
+  // 1. 尝试完整标记匹配
+  const fullRegex = new RegExp(`${escapeRegex(startMarker)}([\\s\\S]*?)${escapeRegex(endMarker)}`)
+  const fullMatch = content.match(fullRegex)
+  if (fullMatch) {
+    return fullMatch[1]
   }
-  // 标记不存在，返回整个预处理后的文本
+
+  // 2. 只有开始标记（结束标记被截断）
+  const startIdx = content.indexOf(startMarker)
+  if (startIdx !== -1) {
+    console.log(`[SocialParser] 找到开始标记但未找到结束标记，取开始标记之后全部内容`)
+    return content.slice(startIdx + startMarker.length)
+  }
+
+  // 3. 都没找到，返回全文
   console.log(`[SocialParser] 未找到标记 ${startMarker}，将在全文中搜索格式化内容`)
   return content
 }
@@ -197,11 +206,14 @@ export function parseForumContent(content: string): ForumData {
   const threads: ForumThread[] = []
   const replies: Record<string, ForumReply[]> = {}
 
-  // 解析标题: [标题|发帖人昵称|帖子id|标题内容|帖子详情]
-  const titleRegex = /\[标题\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+  // 解析标题: [标题|发帖人昵称|帖子id|标题内容|帖子详情] 或 [标题|发帖人昵称|帖子id|标题内容]
+  // 支持5字段和4字段两种格式，也支持内容中没有结尾]的不完整条目
+  const titleRegex5 = /\[标题\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+  const titleRegex4 = /\[标题\|([^|]+)\|([^|]+)\|([^\]|]+)\]/g
   let m: RegExpExecArray | null
 
-  while ((m = titleRegex.exec(forumContent)) !== null) {
+  // 先尝试5字段
+  while ((m = titleRegex5.exec(forumContent)) !== null) {
     const thread: ForumThread = {
       id: m[2].trim(),
       author: m[1].trim(),
@@ -214,6 +226,44 @@ export function parseForumContent(content: string): ForumData {
     }
     threads.push(thread)
     replies[thread.id] = []
+  }
+
+  // 如果5字段没匹配到，尝试4字段格式
+  if (threads.length === 0) {
+    while ((m = titleRegex4.exec(forumContent)) !== null) {
+      const thread: ForumThread = {
+        id: m[2].trim(),
+        author: m[1].trim(),
+        title: m[3].trim(),
+        content: m[3].trim(),
+        replies: [],
+        timestamp: generateTimestamp(),
+        likes: Math.floor(Math.random() * 50) + 5,
+        isLiked: false,
+      }
+      threads.push(thread)
+      replies[thread.id] = []
+    }
+  }
+
+  // 如果仍然没匹配到，尝试不完整条目（被截断的）
+  if (threads.length === 0) {
+    const incompleteRegex = /\[标题\|([^|\]]+)\|([^|\]]+)\|([^|\]]*)/g
+    while ((m = incompleteRegex.exec(forumContent)) !== null) {
+      const titleOrContent = m[3]?.trim() || '无标题'
+      const thread: ForumThread = {
+        id: m[2].trim() || generateId('t'),
+        author: m[1].trim(),
+        title: titleOrContent,
+        content: titleOrContent,
+        replies: [],
+        timestamp: generateTimestamp(),
+        likes: Math.floor(Math.random() * 50) + 5,
+        isLiked: false,
+      }
+      threads.push(thread)
+      replies[thread.id] = []
+    }
   }
 
   // 解析回复: [回复|回帖人昵称|帖子id|回复内容]
@@ -317,6 +367,27 @@ export function parseWeiboContent(content: string): WeiboData {
     })
   }
 
+  // 如果没匹配到完整博文，尝试不完整（截断）的博文
+  if (posts.length === 0) {
+    const incompletePostRegex = /\[博文\|([^|\]]+)\|([^|\]]+)\|([^|\]]*)/g
+    while ((m = incompletePostRegex.exec(weiboContent)) !== null) {
+      const content = m[3]?.trim() || '(内容被截断)'
+      if (content.length > 0) {
+        posts.push({
+          id: m[2].trim() || generateId('w'),
+          author: m[1].trim(),
+          content,
+          timestamp: generateTimestamp(),
+          likes: Math.floor(Math.random() * 200) + 10,
+          isLiked: false,
+          reposts: Math.floor(Math.random() * 50),
+          comments: [],
+          showComments: false,
+        })
+      }
+    }
+  }
+
   // 解析评论: [评论|评论人昵称|博文id|评论内容]
   const commentRegex = /\[评论\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
   while ((m = commentRegex.exec(weiboContent)) !== null) {
@@ -345,6 +416,18 @@ export function parseWeiboContent(content: string): WeiboData {
     })
   }
 
+  // 如果没匹配到完整热搜，尝试不完整的热搜
+  if (hotSearches.length === 0) {
+    const incompleteHotRegex = /\[热搜\|([^|\]]+)\|([^|\]]+)\|?([^|\]]*)/g
+    while ((m = incompleteHotRegex.exec(weiboContent)) !== null) {
+      hotSearches.push({
+        rank: parseInt(m[1].trim()) || hotSearches.length + 1,
+        title: m[2].trim(),
+        heat: m[3]?.trim() || '热',
+      })
+    }
+  }
+
   // 解析榜单: [榜单|榜单名称|榜单类型]
   const rankRegex = /\[榜单\|([^|]+)\|([^\]]+)\]/g
   while ((m = rankRegex.exec(weiboContent)) !== null) {
@@ -352,6 +435,17 @@ export function parseWeiboContent(content: string): WeiboData {
       name: m[1].trim(),
       type: m[2].trim(),
     })
+  }
+
+  // 如果没匹配到完整榜单，尝试不完整的榜单
+  if (rankings.length === 0) {
+    const incompleteRankRegex = /\[榜单\|([^|\]]+)\|?([^|\]]*)/g
+    while ((m = incompleteRankRegex.exec(weiboContent)) !== null) {
+      rankings.push({
+        name: m[1].trim(),
+        type: m[2]?.trim() || '综合',
+      })
+    }
   }
 
   console.log(`[SocialParser] 微博解析结果: ${posts.length}条博文, ${hotSearches.length}条热搜, ${rankings.length}个榜单`)
@@ -382,6 +476,28 @@ export function parseMomentsContent(content: string): MomentsData {
       showInteraction: false,
       commentDraft: '',
     })
+  }
+
+  // 如果没匹配到完整动态，尝试不完整（截断）的动态
+  if (moments.length === 0) {
+    const incompleteMomentRegex = /\[动态\|([^|\]]+)\|([^|\]]+)\|([^|\]]*)/g
+    while ((m = incompleteMomentRegex.exec(momentsContent)) !== null) {
+      const content = m[3]?.trim() || '(内容被截断)'
+      if (content.length > 0) {
+        moments.push({
+          id: m[2].trim() || generateId('m'),
+          author: m[1].trim(),
+          content,
+          timestamp: generateTimestamp(),
+          likes: 0,
+          isLiked: false,
+          likedBy: [],
+          comments: [],
+          showInteraction: false,
+          commentDraft: '',
+        })
+      }
+    }
   }
 
   // 解析点赞: [点赞|点赞人昵称|动态id]

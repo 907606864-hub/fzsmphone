@@ -800,9 +800,9 @@ function clearAllData() {
 
 /* ===== FAB ===== */
 .fab-publish {
-  position: fixed;
+  position: absolute;
   bottom: 24px;
-  right: 24px;
+  right: 16px;
   width: 50px;
   height: 50px;
   border-radius: 50%;

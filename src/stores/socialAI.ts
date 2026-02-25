@@ -41,13 +41,13 @@ function getAIConfig() {
       const apiKey = s.apiKey || ''
       const apiUrl = s.apiUrl === 'custom' ? (s.customApiUrl || '') : (s.apiUrl || '')
       const model = s.model || ''
-      const maxTokens = s.maxLength || 2000
+      const maxTokens = s.maxLength || 4000
       const temperature = s.temperature ?? 0.9
       return { apiKey, apiUrl, model, maxTokens, temperature }
     }
-    return { apiKey: '', apiUrl: '', model: '', maxTokens: 2000, temperature: 0.9 }
+    return { apiKey: '', apiUrl: '', model: '', maxTokens: 4000, temperature: 0.9 }
   } catch {
-    return { apiKey: '', apiUrl: '', model: '', maxTokens: 2000, temperature: 0.9 }
+    return { apiKey: '', apiUrl: '', model: '', maxTokens: 4000, temperature: 0.9 }
   }
 }
 
