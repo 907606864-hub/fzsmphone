@@ -120,7 +120,7 @@ import NavBar from '@/components/common/NavBar.vue'
 import { useChatStore, type Character } from '@/stores/chat'
 
 interface GroupMember {
-  id: number
+  id: string
   name: string
   role: string
   color: string
@@ -156,12 +156,12 @@ const memberColors = [
 ]
 
 const members = ref<GroupMember[]>([
-  { id: 0, name: '我', role: '群主', color: 'var(--accent-blue)', isOwner: true },
+  { id: '0', name: '我', role: '群主', color: 'var(--accent-blue)', isOwner: true },
 ])
 
 const availableCharacters = computed(() => {
   const memberIds = new Set(members.value.map((m) => m.id))
-  return chatStore.characters.filter((c) => !memberIds.has(c.id))
+  return chatStore.characters.filter((c) => !memberIds.has(String(c.id)))
 })
 
 onMounted(async () => {
@@ -176,7 +176,7 @@ onMounted(async () => {
 function addMember(char: Character) {
   const colorIdx = members.value.length % memberColors.length
   members.value.push({
-    id: char.id,
+    id: String(char.id),
     name: char.name,
     role: char.description?.slice(0, 20) || '角色',
     color: memberColors[colorIdx],
@@ -207,7 +207,7 @@ async function sendMessage() {
   scrollToBottom()
 
   // 模拟群成员回复（随机1-3个成员回复）
-  const otherMembers = members.value.filter((m) => m.id !== 0)
+  const otherMembers = members.value.filter((m) => m.id !== '0')
   if (otherMembers.length === 0) return
 
   const replyCount = Math.min(
