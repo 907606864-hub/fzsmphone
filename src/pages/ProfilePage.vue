@@ -2,7 +2,7 @@
   <div class="profile-page">
     <NavBar title="个人中心" :show-back="true" back-to="/">
       <template #right>
-        <button class="nav-btn" @click="showSettings = true">
+        <button class="nav-btn" @click="router.push('/customize')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <circle cx="12" cy="12" r="3" />
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
@@ -67,46 +67,57 @@
         </div>
       </div>
 
+      <!-- 快捷设置 -->
+      <div class="menu-section">
+        <div class="section-title">快捷设置</div>
+        <div class="menu-group">
+          <div class="setting-item">
+            <div class="setting-left">
+              <span class="setting-icon">🌙</span>
+              <span>深色模式</span>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" :checked="settingsStore.settings.darkMode" @change="toggleDarkMode" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="setting-item">
+            <div class="setting-left">
+              <span class="setting-icon">🔔</span>
+              <span>通知提醒</span>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" :checked="settingsStore.settings.notifyEnabled" @change="settingsStore.settings.notifyEnabled = !settingsStore.settings.notifyEnabled" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="setting-item">
+            <div class="setting-left">
+              <span class="setting-icon">🔊</span>
+              <span>消息音效</span>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" :checked="settingsStore.settings.notificationSoundEnabled" @change="settingsStore.settings.notificationSoundEnabled = !settingsStore.settings.notificationSoundEnabled" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="setting-item" @click="router.push('/customize')">
+            <div class="setting-left">
+              <span class="setting-icon">⚙️</span>
+              <span>全部设置</span>
+            </div>
+            <svg class="menu-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
       <!-- 退出登录 -->
       <button class="logout-btn" @click="handleLogout">退出登录</button>
 
       <div class="version-info">贩子死妈小手机 v1.0.0</div>
     </div>
-
-    <!-- 设置弹窗 -->
-    <Teleport to="body">
-      <div v-if="showSettings" class="modal-overlay" @click.self="showSettings = false">
-        <div class="settings-modal">
-          <div class="modal-header">
-            <span>设置</span>
-            <button class="close-btn" @click="showSettings = false">✕</button>
-          </div>
-          <div class="settings-list">
-            <div class="setting-item">
-              <span>深色模式</span>
-              <label class="toggle">
-                <input type="checkbox" v-model="darkMode" @change="toggleTheme" />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div class="setting-item">
-              <span>通知提醒</span>
-              <label class="toggle">
-                <input type="checkbox" v-model="notifications" />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div class="setting-item">
-              <span>音效</span>
-              <label class="toggle">
-                <input type="checkbox" v-model="soundEnabled" />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 
@@ -115,16 +126,14 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { usePhoneStore } from '@/stores/phone'
+import { useSettingsStore } from '@/stores/settings'
 import NavBar from '@/components/common/NavBar.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const phoneStore = usePhoneStore()
+const settingsStore = useSettingsStore()
 
-const showSettings = ref(false)
-const darkMode = ref(false)
-const notifications = ref(true)
-const soundEnabled = ref(true)
 const bio = ref('')
 
 const user = computed(() => authStore.user)
@@ -174,7 +183,8 @@ function handleMenuItem(item: MenuItem) {
   }
 }
 
-function toggleTheme() {
+function toggleDarkMode() {
+  settingsStore.settings.darkMode = !settingsStore.settings.darkMode
   phoneStore.toggleTheme()
 }
 
@@ -184,7 +194,10 @@ async function handleLogout() {
 }
 
 onMounted(() => {
-  darkMode.value = phoneStore.theme === 'dark'
+  // Sync dark mode state
+  if (settingsStore.settings.darkMode !== (phoneStore.theme === 'dark')) {
+    document.documentElement.setAttribute('data-theme', settingsStore.settings.darkMode ? 'dark' : 'light')
+  }
 
   // Calculate days since first use
   const firstUse = localStorage.getItem('first_use')
@@ -411,60 +424,30 @@ onMounted(() => {
   padding-bottom: 20px;
 }
 
-/* 设置弹窗 */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.settings-modal {
-  background: var(--bg-primary);
-  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-  width: 100%;
-  max-height: 60%;
-  overflow-y: auto;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-  border-bottom: 0.5px solid var(--separator);
-}
-
-.close-btn {
-  background: var(--bg-tertiary);
-  border: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.settings-list {
-  padding: 8px 0;
-}
-
+/* 快捷设置项 */
 .setting-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
+}
+
+.setting-item:not(:last-child) {
+  border-bottom: 0.5px solid var(--separator);
+}
+
+.setting-item:active {
+  background: var(--bg-tertiary);
+}
+
+.setting-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.setting-icon {
+  font-size: 18px;
 }
 
 .setting-item span {

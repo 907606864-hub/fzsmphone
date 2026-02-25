@@ -12,32 +12,38 @@
       </template>
     </NavBar>
 
+    <!-- No API Key warning -->
+    <div v-if="!settingsStore.settings.apiKey" class="api-warning" @click="goToSettings">
+      <span>⚠️ 未配置 API Key，点击前往设置</span>
+    </div>
+
     <!-- Messages -->
     <div ref="messagesRef" class="messages-area" @scroll="handleScroll">
       <div class="messages-inner">
         <!-- Date divider -->
-        <div class="date-divider" v-if="chatStore.currentMessages.length > 0">
-          <span>{{ formatDate(chatStore.currentMessages[0]?.created_at) }}</span>
+        <div class="date-divider" v-if="messages.length > 0">
+          <span>{{ formatDate(messages[0]?.created_at || messages[0]?.timestamp) }}</span>
         </div>
 
         <TransitionGroup name="msg">
           <div
-            v-for="msg in chatStore.currentMessages"
+            v-for="msg in messages"
             :key="msg.id"
             class="message-row"
-            :class="{ 'is-user': msg.role === 'user', 'is-assistant': msg.role === 'assistant' }"
+            :class="{
+              'is-user': msg.role === 'user',
+              'is-assistant': msg.role === 'assistant',
+            }"
           >
-            <!-- Avatar -->
+            <!-- AI Avatar -->
             <div class="msg-avatar" v-if="msg.role === 'assistant'">
               <span class="avatar-emoji">🤖</span>
             </div>
 
             <!-- Bubble -->
             <div class="msg-bubble" :class="msg.role">
-              <p class="msg-text" v-if="msg.msg_type === 'text'">{{ msg.content }}</p>
-              <p class="msg-text" v-else-if="msg.msg_type === 'image'">📷 [图片]</p>
-              <p class="msg-text" v-else>{{ msg.content }}</p>
-              <span class="msg-time">{{ formatMsgTime(msg.created_at) }}</span>
+              <p class="msg-text">{{ msg.content }}</p>
+              <span class="msg-time">{{ formatMsgTime(msg.created_at || msg.timestamp) }}</span>
             </div>
 
             <!-- User avatar -->
@@ -53,7 +59,8 @@
             <span class="avatar-emoji">🤖</span>
           </div>
           <div class="msg-bubble assistant typing-bubble">
-            <div class="typing-dots">
+            <div v-if="streamingText" class="msg-text">{{ streamingText }}</div>
+            <div v-else class="typing-dots">
               <span></span><span></span><span></span>
             </div>
           </div>
@@ -80,7 +87,7 @@
             class="text-input"
             placeholder="输入消息..."
             rows="1"
-            @keydown.enter.prevent="handleSend"
+            @keydown="handleKeydown"
             @input="autoResize"
           ></textarea>
         </div>
@@ -88,7 +95,7 @@
         <button
           class="send-btn"
           :class="{ active: inputText.trim() }"
-          :disabled="!inputText.trim()"
+          :disabled="!inputText.trim() || isTyping"
           @click="handleSend"
         >
           <svg viewBox="0 0 24 24" fill="currentColor">
@@ -101,24 +108,34 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import NavBar from '@/components/common/NavBar.vue'
 import { useChatStore } from '@/stores/chat'
+import { useSettingsStore } from '@/stores/settings'
+import { sendAIRequest, buildSystemPrompt, splitIntoSegments } from '@/utils/aiService'
+import type { AIMessage } from '@/utils/aiService'
 
 const route = useRoute()
+const router = useRouter()
 const chatStore = useChatStore()
+const settingsStore = useSettingsStore()
 
 const messagesRef = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLTextAreaElement | null>(null)
 const inputText = ref('')
 const isTyping = ref(false)
+const streamingText = ref('')
 const showInfo = ref(false)
 const showEmojiPanel = ref(false)
+let abortController: AbortController | null = null
+
+// 本地消息存储（用于前端直接AI调用场景）
+const localMessages = ref<any[]>([])
 
 const conversationId = computed(() => {
   const id = route.params.friendId || route.params.id
-  return id ? Number(id) : null
+  return id ? String(id) : null
 })
 
 const chatTitle = computed(() => {
@@ -127,7 +144,20 @@ const chatTitle = computed(() => {
     || '聊天'
 })
 
-function formatDate(dateStr: string): string {
+// 使用本地消息或store消息
+const messages = computed(() => {
+  if (localMessages.value.length > 0) {
+    return localMessages.value
+  }
+  return chatStore.currentMessages
+})
+
+// 获取当前角色信息
+const currentCharacter = computed(() => {
+  return chatStore.currentConversation?.character || null
+})
+
+function formatDate(dateStr: string | number): string {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   const now = new Date()
@@ -139,7 +169,7 @@ function formatDate(dateStr: string): string {
   return `${d.getMonth() + 1}月${d.getDate()}日`
 }
 
-function formatMsgTime(dateStr: string): string {
+function formatMsgTime(dateStr: string | number): string {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
@@ -157,7 +187,7 @@ function scrollToBottom(smooth = true) {
 }
 
 function handleScroll() {
-  // Could implement load-more-on-scroll-top
+  // 可实现上拉加载更多
 }
 
 function autoResize() {
@@ -168,37 +198,211 @@ function autoResize() {
   }
 }
 
+function handleKeydown(e: KeyboardEvent) {
+  const behavior = settingsStore.settings.sendKeyBehavior
+  if (e.key === 'Enter') {
+    if (behavior === 'send' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+    // 如果是 'newline' 模式，Enter 正常换行
+  }
+}
+
+function goToSettings() {
+  router.push('/customize')
+}
+
+// 加载本地消息
+function loadLocalMessages() {
+  if (!conversationId.value) return
+  const key = `chat-messages-${conversationId.value}`
+  try {
+    const saved = localStorage.getItem(key)
+    if (saved) {
+      localMessages.value = JSON.parse(saved)
+    }
+  } catch {
+    // ignore
+  }
+}
+
+// 保存本地消息
+function saveLocalMessages() {
+  if (!conversationId.value) return
+  const key = `chat-messages-${conversationId.value}`
+  try {
+    // 只保留最近200条
+    const toSave = localMessages.value.slice(-200)
+    localStorage.setItem(key, JSON.stringify(toSave))
+  } catch {
+    // ignore
+  }
+}
+
+// 添加本地消息
+function addMessage(role: 'user' | 'assistant', content: string) {
+  const msg = {
+    id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    conversation_id: conversationId.value,
+    role,
+    content,
+    msg_type: 'text',
+    extra: {},
+    created_at: new Date().toISOString(),
+    timestamp: Date.now(),
+  }
+  localMessages.value.push(msg)
+  saveLocalMessages()
+  return msg
+}
+
+// 构建消息历史给 AI
+function buildMessageHistory(): AIMessage[] {
+  const msgs: AIMessage[] = []
+
+  // 系统提示词
+  const character = currentCharacter.value
+  const systemPrompt = buildSystemPrompt(
+    character || { name: chatTitle.value },
+    settingsStore.settings.userName ? { name: settingsStore.settings.userName } : undefined,
+    settingsStore.settings.maxLength,
+  )
+  msgs.push({ role: 'system', content: systemPrompt })
+
+  // 最近消息上下文
+  const recent = localMessages.value
+    .filter(m => m.role === 'user' || m.role === 'assistant')
+    .slice(-10)
+
+  for (const m of recent) {
+    msgs.push({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    })
+  }
+
+  return msgs
+}
+
 async function handleSend() {
   const text = inputText.value.trim()
-  if (!text || !conversationId.value) return
+  if (!text || isTyping.value) return
 
   inputText.value = ''
   if (inputRef.value) {
     inputRef.value.style.height = 'auto'
   }
 
-  await chatStore.sendMessage(conversationId.value, text)
+  // 添加用户消息
+  addMessage('user', text)
   scrollToBottom()
 
-  // Simulate AI typing
-  isTyping.value = true
-  setTimeout(() => {
-    isTyping.value = false
-    // The actual AI response would come via WebSocket or API polling
+  // 也发到后端（如果有的话）
+  if (conversationId.value) {
+    chatStore.sendMessage(Number(conversationId.value), text).catch(() => {})
+  }
+
+  // 检查 API Key
+  const s = settingsStore.settings
+  if (!s.apiKey) {
+    // 无 API Key 时不调用 AI
+    addMessage('assistant', '⚠️ 请先在设置中配置 API Key 才能和我聊天哦~')
     scrollToBottom()
-  }, 1500)
+    return
+  }
+
+  // 调用 AI
+  isTyping.value = true
+  streamingText.value = ''
+  abortController = new AbortController()
+
+  try {
+    const aiMessages = buildMessageHistory()
+    const apiUrl = settingsStore.getApiUrl()
+    const isStream = s.streamEnabled
+
+    const response = await sendAIRequest({
+      apiKey: s.apiKey,
+      apiUrl: apiUrl,
+      model: s.model,
+      messages: aiMessages,
+      temperature: s.temperature,
+      maxTokens: s.maxLength,
+      stream: isStream,
+      timeout: s.timeout,
+      signal: abortController.signal,
+      onChunk: (chunk: string) => {
+        // 流式模式：实时更新显示
+        streamingText.value += chunk
+        scrollToBottom()
+      },
+    })
+
+    isTyping.value = false
+    const content = isStream ? streamingText.value.trim() : response.content
+    streamingText.value = ''
+
+    if (!content) {
+      addMessage('assistant', '(AI 返回了空回复)')
+      scrollToBottom()
+      return
+    }
+
+    // 分段发送
+    if (s.enableSplit) {
+      const segments = splitIntoSegments(content)
+      for (let i = 0; i < segments.length; i++) {
+        if (i > 0) {
+          // 模拟打字延迟
+          isTyping.value = true
+          await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 500))
+          isTyping.value = false
+        }
+        addMessage('assistant', segments[i])
+        scrollToBottom()
+      }
+    } else {
+      addMessage('assistant', content)
+      scrollToBottom()
+    }
+  } catch (err: any) {
+    isTyping.value = false
+    streamingText.value = ''
+
+    if (err.name === 'AbortError' || err.message?.includes('abort')) {
+      return // 用户主动取消
+    }
+
+    addMessage('assistant', `❌ AI 回复失败：${err.message}`)
+    scrollToBottom()
+  } finally {
+    abortController = null
+  }
 }
 
 watch(
-  () => chatStore.currentMessages.length,
+  () => messages.value.length,
   () => scrollToBottom(),
 )
 
 onMounted(() => {
+  // 加载本地消息
+  loadLocalMessages()
+
+  // 也尝试从后端加载
   if (conversationId.value) {
-    chatStore.fetchMessages(conversationId.value)
+    chatStore.fetchMessages(Number(conversationId.value)).catch(() => {})
   }
+
   scrollToBottom(false)
+})
+
+onUnmounted(() => {
+  // 取消进行中的请求
+  if (abortController) {
+    abortController.abort()
+  }
 })
 </script>
 
@@ -210,12 +414,32 @@ onMounted(() => {
   background: var(--bg-secondary);
 }
 
+/* API Warning */
+.api-warning {
+  background: linear-gradient(135deg, #ff9500, #ff6348);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.api-warning:active {
+  opacity: 0.8;
+}
+
 /* Messages */
 .messages-area {
   flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding: 0;
+}
+
+.messages-area::-webkit-scrollbar {
+  display: none;
 }
 
 .messages-inner {
@@ -287,7 +511,7 @@ onMounted(() => {
 }
 
 .msg-bubble.user {
-  background: var(--brand-primary);
+  background: var(--brand-primary, #007aff);
   color: white;
   border-bottom-right-radius: 6px;
 }
@@ -439,12 +663,16 @@ onMounted(() => {
 }
 
 .send-btn.active {
-  background: var(--brand-primary);
+  background: var(--brand-primary, #007aff);
   color: white;
   transform: scale(1);
 }
 
-.send-btn:active.active {
+.send-btn:disabled {
+  opacity: 0.5;
+}
+
+.send-btn:active.active:not(:disabled) {
   transform: scale(0.9);
 }
 
