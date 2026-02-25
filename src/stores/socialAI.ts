@@ -12,17 +12,20 @@ import {
   parseForumContent,
   parseWeiboContent,
   parseMomentsContent,
+  parseZhihuContent,
+  parseXhsContent,
+  parseDouyinContent,
   generateId,
 } from '@/utils/socialParsers'
 import type {
   ForumThread,
-  ForumReply,
   WeiboItem,
-  WeiboComment,
   HotSearchItem,
   RankingItem,
   MomentItem,
-  MomentComment,
+  ZhihuQuestion,
+  XhsNote,
+  DouyinVideo,
 } from '@/utils/socialParsers'
 
 // ==================== 存储键 ====================
@@ -30,6 +33,9 @@ const STORAGE_KEYS = {
   forum: 'social-data-forum',
   weibo: 'social-data-weibo',
   moments: 'social-data-moments',
+  zhihu: 'social-data-zhihu',
+  xiaohongshu: 'social-data-xiaohongshu',
+  douyin: 'social-data-douyin',
 }
 
 // ==================== AI配置读取 ====================
@@ -66,6 +72,18 @@ export const useSocialAIStore = defineStore('socialAI', () => {
   const moments = ref<MomentItem[]>([])
   const momentsLoading = ref(false)
 
+  // ==================== 知乎状态 ====================
+  const zhihuQuestions = ref<ZhihuQuestion[]>([])
+  const zhihuLoading = ref(false)
+
+  // ==================== 小红书状态 ====================
+  const xhsNotes = ref<XhsNote[]>([])
+  const xhsLoading = ref(false)
+
+  // ==================== 抖音状态 ====================
+  const douyinVideos = ref<DouyinVideo[]>([])
+  const douyinLoading = ref(false)
+
   // ==================== 通用 ====================
   const generating = ref(false)
   const lastError = ref('')
@@ -87,6 +105,15 @@ export const useSocialAIStore = defineStore('socialAI', () => {
           break
         case 'moments':
           localStorage.setItem(STORAGE_KEYS.moments, JSON.stringify(moments.value))
+          break
+        case 'zhihu':
+          localStorage.setItem(STORAGE_KEYS.zhihu, JSON.stringify(zhihuQuestions.value))
+          break
+        case 'xiaohongshu':
+          localStorage.setItem(STORAGE_KEYS.xiaohongshu, JSON.stringify(xhsNotes.value))
+          break
+        case 'douyin':
+          localStorage.setItem(STORAGE_KEYS.douyin, JSON.stringify(douyinVideos.value))
           break
       }
     } catch { /* ignore */ }
@@ -116,6 +143,27 @@ export const useSocialAIStore = defineStore('socialAI', () => {
           const saved = localStorage.getItem(STORAGE_KEYS.moments)
           if (saved) {
             moments.value = JSON.parse(saved)
+          }
+          break
+        }
+        case 'zhihu': {
+          const saved = localStorage.getItem(STORAGE_KEYS.zhihu)
+          if (saved) {
+            zhihuQuestions.value = JSON.parse(saved)
+          }
+          break
+        }
+        case 'xiaohongshu': {
+          const saved = localStorage.getItem(STORAGE_KEYS.xiaohongshu)
+          if (saved) {
+            xhsNotes.value = JSON.parse(saved)
+          }
+          break
+        }
+        case 'douyin': {
+          const saved = localStorage.getItem(STORAGE_KEYS.douyin)
+          if (saved) {
+            douyinVideos.value = JSON.parse(saved)
           }
           break
         }
@@ -416,6 +464,189 @@ export const useSocialAIStore = defineStore('socialAI', () => {
     saveData('moments')
   }
 
+  // ==================== 知乎操作 ====================
+  async function generateZhihuContent(action?: string) {
+    if (generating.value) return
+    generating.value = true
+    zhihuLoading.value = true
+    lastError.value = ''
+
+    try {
+      const content = await callAI('zhihu', action)
+      const data = parseZhihuContent(content)
+
+      if (data.questions.length > 0) {
+        const existingIds = new Set(zhihuQuestions.value.map(q => q.id))
+        for (const question of data.questions) {
+          if (existingIds.has(question.id)) {
+            question.id = generateId('q')
+          }
+          zhihuQuestions.value.unshift(question)
+        }
+        saveData('zhihu')
+      } else {
+        lastError.value = 'AI未生成有效的知乎内容。请打开浏览器控制台(F12)查看AI原始回复，或检查提示词设置。'
+      }
+    } catch (e: any) {
+      lastError.value = e.message || '生成失败'
+      console.error('[SocialAI] 知乎生成失败:', e)
+    } finally {
+      generating.value = false
+      zhihuLoading.value = false
+    }
+  }
+
+  function toggleZhihuVote(questionId: string, answerId: string, voteType: 'up' | 'down') {
+    const question = zhihuQuestions.value.find(q => q.id === questionId)
+    if (!question) return
+    const answer = question.answers.find(a => a.id === answerId)
+    if (!answer) return
+
+    if (voteType === 'up') {
+      if (answer.isUpvoted) {
+        answer.isUpvoted = false
+        answer.upvotes--
+      } else {
+        answer.isUpvoted = true
+        answer.upvotes++
+        if (answer.isDownvoted) {
+          answer.isDownvoted = false
+          answer.downvotes--
+        }
+      }
+    } else {
+      if (answer.isDownvoted) {
+        answer.isDownvoted = false
+        answer.downvotes--
+      } else {
+        answer.isDownvoted = true
+        answer.downvotes++
+        if (answer.isUpvoted) {
+          answer.isUpvoted = false
+          answer.upvotes--
+        }
+      }
+    }
+    saveData('zhihu')
+  }
+
+  function deleteZhihuQuestion(questionId: string) {
+    zhihuQuestions.value = zhihuQuestions.value.filter(q => q.id !== questionId)
+    saveData('zhihu')
+  }
+
+  // ==================== 小红书操作 ====================
+  async function generateXhsContent(action?: string) {
+    if (generating.value) return
+    generating.value = true
+    xhsLoading.value = true
+    lastError.value = ''
+
+    try {
+      const content = await callAI('xiaohongshu', action)
+      const data = parseXhsContent(content)
+
+      if (data.notes.length > 0) {
+        const existingIds = new Set(xhsNotes.value.map(n => n.id))
+        for (const note of data.notes) {
+          if (existingIds.has(note.id)) {
+            note.id = generateId('n')
+          }
+          xhsNotes.value.unshift(note)
+        }
+        saveData('xiaohongshu')
+      } else {
+        lastError.value = 'AI未生成有效的小红书内容。请打开浏览器控制台(F12)查看AI原始回复，或检查提示词设置。'
+      }
+    } catch (e: any) {
+      lastError.value = e.message || '生成失败'
+      console.error('[SocialAI] 小红书生成失败:', e)
+    } finally {
+      generating.value = false
+      xhsLoading.value = false
+    }
+  }
+
+  function toggleXhsLike(noteId: string) {
+    const note = xhsNotes.value.find(n => n.id === noteId)
+    if (note) {
+      note.isLiked = !note.isLiked
+      note.likes += note.isLiked ? 1 : -1
+      saveData('xiaohongshu')
+    }
+  }
+
+  function toggleXhsCollect(noteId: string) {
+    const note = xhsNotes.value.find(n => n.id === noteId)
+    if (note) {
+      note.isCollected = !note.isCollected
+      note.collects += note.isCollected ? 1 : -1
+      saveData('xiaohongshu')
+    }
+  }
+
+  function deleteXhsNote(noteId: string) {
+    xhsNotes.value = xhsNotes.value.filter(n => n.id !== noteId)
+    saveData('xiaohongshu')
+  }
+
+  // ==================== 抖音操作 ====================
+  async function generateDouyinContent(action?: string) {
+    if (generating.value) return
+    generating.value = true
+    douyinLoading.value = true
+    lastError.value = ''
+
+    try {
+      const content = await callAI('douyin', action)
+      const data = parseDouyinContent(content)
+
+      if (data.videos.length > 0) {
+        const existingIds = new Set(douyinVideos.value.map(v => v.id))
+        for (const video of data.videos) {
+          if (existingIds.has(video.id)) {
+            video.id = generateId('v')
+          }
+          douyinVideos.value.unshift(video)
+        }
+        saveData('douyin')
+      } else {
+        lastError.value = 'AI未生成有效的抖音内容。请打开浏览器控制台(F12)查看AI原始回复，或检查提示词设置。'
+      }
+    } catch (e: any) {
+      lastError.value = e.message || '生成失败'
+      console.error('[SocialAI] 抖音生成失败:', e)
+    } finally {
+      generating.value = false
+      douyinLoading.value = false
+    }
+  }
+
+  function toggleDouyinLike(videoId: string) {
+    const video = douyinVideos.value.find(v => v.id === videoId)
+    if (video) {
+      video.isLiked = !video.isLiked
+      video.likes += video.isLiked ? 1 : -1
+      saveData('douyin')
+    }
+  }
+
+  function toggleDouyinCommentLike(videoId: string, commentId: string) {
+    const video = douyinVideos.value.find(v => v.id === videoId)
+    if (!video) return
+    const comment = video.comments.find(c => c.id === commentId)
+    if (comment) {
+      comment.isLiked = !comment.isLiked
+      comment.likes += comment.isLiked ? 1 : -1
+      saveData('douyin')
+    }
+  }
+
+  function deleteDouyinVideo(videoId: string) {
+    douyinVideos.value = douyinVideos.value.filter(v => v.id !== videoId)
+    saveData('douyin')
+  }
+
   // ==================== 清除数据 ====================
   function clearData(type: SocialType) {
     switch (type) {
@@ -429,6 +660,15 @@ export const useSocialAIStore = defineStore('socialAI', () => {
         break
       case 'moments':
         moments.value = []
+        break
+      case 'zhihu':
+        zhihuQuestions.value = []
+        break
+      case 'xiaohongshu':
+        xhsNotes.value = []
+        break
+      case 'douyin':
+        douyinVideos.value = []
         break
     }
     saveData(type)
@@ -482,6 +722,29 @@ export const useSocialAIStore = defineStore('socialAI', () => {
     momentComment,
     toggleMomentLike,
     deleteMoment,
+
+    // 知乎
+    zhihuQuestions,
+    zhihuLoading,
+    generateZhihuContent,
+    toggleZhihuVote,
+    deleteZhihuQuestion,
+
+    // 小红书
+    xhsNotes,
+    xhsLoading,
+    generateXhsContent,
+    toggleXhsLike,
+    toggleXhsCollect,
+    deleteXhsNote,
+
+    // 抖音
+    douyinVideos,
+    douyinLoading,
+    generateDouyinContent,
+    toggleDouyinLike,
+    toggleDouyinCommentLike,
+    deleteDouyinVideo,
 
     // 通用
     generating,

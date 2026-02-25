@@ -551,6 +551,449 @@ export function parseMomentsContent(content: string): MomentsData {
   return { moments }
 }
 
+// ==================== 知乎数据类型 ====================
+
+export interface ZhihuQuestion {
+  id: string
+  author: string
+  title: string
+  description: string
+  answers: ZhihuAnswer[]
+  timestamp: string
+  followers: number
+  views: number
+}
+
+export interface ZhihuAnswer {
+  id: string
+  questionId: string
+  author: string
+  content: string
+  timestamp: string
+  upvotes: number
+  downvotes: number
+  isUpvoted: boolean
+  isDownvoted: boolean
+  comments: ZhihuComment[]
+}
+
+export interface ZhihuComment {
+  id: string
+  questionId: string
+  answerAuthor: string
+  author: string
+  content: string
+  timestamp: string
+  likes: number
+  isLiked: boolean
+}
+
+export interface ZhihuData {
+  questions: ZhihuQuestion[]
+}
+
+// ==================== 小红书数据类型 ====================
+
+export interface XhsNote {
+  id: string
+  author: string
+  title: string
+  content: string
+  tags: string[]
+  timestamp: string
+  likes: number
+  isLiked: boolean
+  collects: number
+  isCollected: boolean
+  comments: XhsComment[]
+  showComments: boolean
+}
+
+export interface XhsComment {
+  id: string
+  noteId: string
+  author: string
+  content: string
+  replyTo?: string
+  timestamp: string
+  likes: number
+  isLiked: boolean
+}
+
+export interface XhsData {
+  notes: XhsNote[]
+}
+
+// ==================== 抖音数据类型 ====================
+
+export interface DouyinVideo {
+  id: string
+  author: string
+  description: string
+  tags: string[]
+  timestamp: string
+  likes: number
+  isLiked: boolean
+  commentCount: number
+  shares: number
+  comments: DouyinComment[]
+  showComments: boolean
+}
+
+export interface DouyinComment {
+  id: string
+  videoId: string
+  author: string
+  content: string
+  replyTo?: string
+  timestamp: string
+  likes: number
+  isLiked: boolean
+  isAuthorReply: boolean
+}
+
+export interface DouyinData {
+  videos: DouyinVideo[]
+}
+
+// ==================== 知乎解析器 ====================
+
+export function parseZhihuContent(content: string): ZhihuData {
+  const processed = preprocessContent(content)
+  const zhihuContent = extractMarkedContent(processed, '<!-- ZHIHU_CONTENT_START -->', '<!-- ZHIHU_CONTENT_END -->')
+
+  const questions: ZhihuQuestion[] = []
+  let m: RegExpExecArray | null
+
+  // 解析问题: [问题|提问人昵称|问题id|问题标题|问题描述]
+  const questionRegex5 = /\[问题\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+  while ((m = questionRegex5.exec(zhihuContent)) !== null) {
+    questions.push({
+      id: m[2].trim(),
+      author: m[1].trim(),
+      title: m[3].trim(),
+      description: m[4].trim(),
+      answers: [],
+      timestamp: generateTimestamp(),
+      followers: Math.floor(Math.random() * 200) + 10,
+      views: Math.floor(Math.random() * 5000) + 100,
+    })
+  }
+
+  // 如果5字段没匹配到，尝试4字段
+  if (questions.length === 0) {
+    const questionRegex4 = /\[问题\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+    while ((m = questionRegex4.exec(zhihuContent)) !== null) {
+      questions.push({
+        id: m[2].trim(),
+        author: m[1].trim(),
+        title: m[3].trim(),
+        description: '',
+        answers: [],
+        timestamp: generateTimestamp(),
+        followers: Math.floor(Math.random() * 200) + 10,
+        views: Math.floor(Math.random() * 5000) + 100,
+      })
+    }
+  }
+
+  // 不完整匹配
+  if (questions.length === 0) {
+    const incompleteRegex = /\[问题\|([^|\]]+)\|([^|\]]+)\|([^|\]]*)/g
+    while ((m = incompleteRegex.exec(zhihuContent)) !== null) {
+      questions.push({
+        id: m[2].trim() || generateId('q'),
+        author: m[1].trim(),
+        title: m[3]?.trim() || '无标题问题',
+        description: '',
+        answers: [],
+        timestamp: generateTimestamp(),
+        followers: Math.floor(Math.random() * 200) + 10,
+        views: Math.floor(Math.random() * 5000) + 100,
+      })
+    }
+  }
+
+  // 解析回答: [回答|回答人昵称|问题id|回答内容]
+  const answerRegex = /\[回答\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+  while ((m = answerRegex.exec(zhihuContent)) !== null) {
+    const qId = m[2].trim()
+    const question = questions.find(q => q.id === qId)
+    if (question) {
+      question.answers.push({
+        id: generateId('ans'),
+        questionId: qId,
+        author: m[1].trim(),
+        content: m[3].trim(),
+        timestamp: generateTimestamp(),
+        upvotes: Math.floor(Math.random() * 500) + 5,
+        downvotes: Math.floor(Math.random() * 10),
+        isUpvoted: false,
+        isDownvoted: false,
+        comments: [],
+      })
+    }
+  }
+
+  // 解析评论: [评论|评论人昵称|问题id|回答人昵称|评论内容]
+  const commentRegex = /\[评论\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+  while ((m = commentRegex.exec(zhihuContent)) !== null) {
+    const qId = m[2].trim()
+    const answerAuthor = m[3].trim()
+    const question = questions.find(q => q.id === qId)
+    if (question) {
+      const answer = question.answers.find(a => a.author === answerAuthor)
+      if (answer) {
+        answer.comments.push({
+          id: generateId('zc'),
+          questionId: qId,
+          answerAuthor,
+          author: m[1].trim(),
+          content: m[4].trim(),
+          timestamp: generateTimestamp(),
+          likes: Math.floor(Math.random() * 20),
+          isLiked: false,
+        })
+      }
+    }
+  }
+
+  console.log(`[SocialParser] 知乎解析结果: ${questions.length}个问题`)
+  return { questions }
+}
+
+// ==================== 小红书解析器 ====================
+
+export function parseXhsContent(content: string): XhsData {
+  const processed = preprocessContent(content)
+  const xhsContent = extractMarkedContent(processed, '<!-- XHS_CONTENT_START -->', '<!-- XHS_CONTENT_END -->')
+
+  const notes: XhsNote[] = []
+  let m: RegExpExecArray | null
+
+  // 解析笔记: [笔记|作者昵称|笔记id|笔记标题|笔记内容|标签1,标签2,标签3]
+  const noteRegex6 = /\[笔记\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+  while ((m = noteRegex6.exec(xhsContent)) !== null) {
+    const tagsStr = m[5].trim()
+    const tags = tagsStr.split(/[,，]/).map(t => t.trim()).filter(Boolean)
+    notes.push({
+      id: m[2].trim(),
+      author: m[1].trim(),
+      title: m[3].trim(),
+      content: m[4].trim(),
+      tags,
+      timestamp: generateTimestamp(),
+      likes: Math.floor(Math.random() * 1000) + 50,
+      isLiked: false,
+      collects: Math.floor(Math.random() * 300) + 10,
+      isCollected: false,
+      comments: [],
+      showComments: false,
+    })
+  }
+
+  // 5字段（无标签）
+  if (notes.length === 0) {
+    const noteRegex5 = /\[笔记\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+    while ((m = noteRegex5.exec(xhsContent)) !== null) {
+      notes.push({
+        id: m[2].trim(),
+        author: m[1].trim(),
+        title: m[3].trim(),
+        content: m[4].trim(),
+        tags: [],
+        timestamp: generateTimestamp(),
+        likes: Math.floor(Math.random() * 1000) + 50,
+        isLiked: false,
+        collects: Math.floor(Math.random() * 300) + 10,
+        isCollected: false,
+        comments: [],
+        showComments: false,
+      })
+    }
+  }
+
+  // 不完整匹配
+  if (notes.length === 0) {
+    const incompleteRegex = /\[笔记\|([^|\]]+)\|([^|\]]+)\|([^|\]]*)/g
+    while ((m = incompleteRegex.exec(xhsContent)) !== null) {
+      notes.push({
+        id: m[2].trim() || generateId('n'),
+        author: m[1].trim(),
+        title: m[3]?.trim() || '无标题',
+        content: '',
+        tags: [],
+        timestamp: generateTimestamp(),
+        likes: Math.floor(Math.random() * 1000) + 50,
+        isLiked: false,
+        collects: Math.floor(Math.random() * 300) + 10,
+        isCollected: false,
+        comments: [],
+        showComments: false,
+      })
+    }
+  }
+
+  // 解析评论: [评论|评论人昵称|笔记id|评论内容]
+  const commentRegex = /\[评论\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+  while ((m = commentRegex.exec(xhsContent)) !== null) {
+    const noteId = m[2].trim()
+    const note = notes.find(n => n.id === noteId)
+    if (note) {
+      note.comments.push({
+        id: generateId('xc'),
+        noteId,
+        author: m[1].trim(),
+        content: m[3].trim(),
+        timestamp: generateTimestamp(),
+        likes: Math.floor(Math.random() * 50),
+        isLiked: false,
+      })
+    }
+  }
+
+  // 解析回复: [回复|回复人昵称|笔记id|被回复人昵称|回复内容]
+  const replyRegex = /\[回复\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+  while ((m = replyRegex.exec(xhsContent)) !== null) {
+    const noteId = m[2].trim()
+    const note = notes.find(n => n.id === noteId)
+    if (note) {
+      note.comments.push({
+        id: generateId('xcr'),
+        noteId,
+        author: m[1].trim(),
+        content: m[4].trim(),
+        replyTo: m[3].trim(),
+        timestamp: generateTimestamp(),
+        likes: Math.floor(Math.random() * 20),
+        isLiked: false,
+      })
+    }
+  }
+
+  console.log(`[SocialParser] 小红书解析结果: ${notes.length}条笔记`)
+  return { notes }
+}
+
+// ==================== 抖音解析器 ====================
+
+export function parseDouyinContent(content: string): DouyinData {
+  const processed = preprocessContent(content)
+  const dyContent = extractMarkedContent(processed, '<!-- DOUYIN_CONTENT_START -->', '<!-- DOUYIN_CONTENT_END -->')
+
+  const videos: DouyinVideo[] = []
+  let m: RegExpExecArray | null
+
+  // 解析视频: [视频|作者昵称|视频id|视频描述|标签1,标签2]
+  const videoRegex5 = /\[视频\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+  while ((m = videoRegex5.exec(dyContent)) !== null) {
+    const tagsStr = m[4].trim()
+    const tags = tagsStr.split(/[,，]/).map(t => t.trim()).filter(Boolean)
+    videos.push({
+      id: m[2].trim(),
+      author: m[1].trim(),
+      description: m[3].trim(),
+      tags,
+      timestamp: generateTimestamp(),
+      likes: Math.floor(Math.random() * 10000) + 100,
+      isLiked: false,
+      commentCount: 0,
+      shares: Math.floor(Math.random() * 500) + 10,
+      comments: [],
+      showComments: false,
+    })
+  }
+
+  // 4字段（无标签）
+  if (videos.length === 0) {
+    const videoRegex4 = /\[视频\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+    while ((m = videoRegex4.exec(dyContent)) !== null) {
+      videos.push({
+        id: m[2].trim(),
+        author: m[1].trim(),
+        description: m[3].trim(),
+        tags: [],
+        timestamp: generateTimestamp(),
+        likes: Math.floor(Math.random() * 10000) + 100,
+        isLiked: false,
+        commentCount: 0,
+        shares: Math.floor(Math.random() * 500) + 10,
+        comments: [],
+        showComments: false,
+      })
+    }
+  }
+
+  // 不完整匹配
+  if (videos.length === 0) {
+    const incompleteRegex = /\[视频\|([^|\]]+)\|([^|\]]+)\|([^|\]]*)/g
+    while ((m = incompleteRegex.exec(dyContent)) !== null) {
+      videos.push({
+        id: m[2].trim() || generateId('v'),
+        author: m[1].trim(),
+        description: m[3]?.trim() || '(视频内容)',
+        tags: [],
+        timestamp: generateTimestamp(),
+        likes: Math.floor(Math.random() * 10000) + 100,
+        isLiked: false,
+        commentCount: 0,
+        shares: Math.floor(Math.random() * 500) + 10,
+        comments: [],
+        showComments: false,
+      })
+    }
+  }
+
+  // 解析评论: [评论|评论人昵称|视频id|评论内容]
+  const commentRegex = /\[评论\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+  while ((m = commentRegex.exec(dyContent)) !== null) {
+    const videoId = m[2].trim()
+    const video = videos.find(v => v.id === videoId)
+    if (video) {
+      video.comments.push({
+        id: generateId('dc'),
+        videoId,
+        author: m[1].trim(),
+        content: m[3].trim(),
+        timestamp: generateTimestamp(),
+        likes: Math.floor(Math.random() * 2000) + 10,
+        isLiked: false,
+        isAuthorReply: false,
+      })
+    }
+  }
+
+  // 解析回复: [回复|回复人昵称|视频id|被回复人昵称|回复内容]
+  const replyRegex = /\[回复\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+  while ((m = replyRegex.exec(dyContent)) !== null) {
+    const videoId = m[2].trim()
+    const video = videos.find(v => v.id === videoId)
+    if (video) {
+      const replyAuthor = m[1].trim()
+      const isAuthor = replyAuthor === video.author
+      video.comments.push({
+        id: generateId('dcr'),
+        videoId,
+        author: replyAuthor,
+        content: m[4].trim(),
+        replyTo: m[3].trim(),
+        timestamp: generateTimestamp(),
+        likes: Math.floor(Math.random() * 500),
+        isLiked: false,
+        isAuthorReply: isAuthor,
+      })
+    }
+  }
+
+  // 更新评论计数
+  videos.forEach(v => {
+    v.commentCount = v.comments.length
+  })
+
+  console.log(`[SocialParser] 抖音解析结果: ${videos.length}条视频`)
+  return { videos }
+}
+
 // ==================== 内容格式化工具 ====================
 
 /** 格式化内容: 处理@用户、话题标签、换行 */
