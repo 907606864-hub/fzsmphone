@@ -234,6 +234,7 @@
 import { ref, computed, onMounted } from 'vue'
 import NavBar from '@/components/common/NavBar.vue'
 import { sendAIRequest } from '@/utils/aiService'
+import { parseAIJsonArray } from '@/utils/aiJsonParser'
 import { useSettingsStore } from '@/stores/settings'
 
 interface WorldBookEntry {
@@ -603,7 +604,7 @@ async function generateBatchEntries() {
       content = content.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '')
     }
 
-    const parsed = JSON.parse(content)
+    const parsed = parseAIJsonArray(content, { allowSingleObject: false })
     if (!Array.isArray(parsed) || parsed.length === 0) {
       throw new Error('AI返回的数据格式不正确')
     }

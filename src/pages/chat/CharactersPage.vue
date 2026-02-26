@@ -183,6 +183,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import NavBar from '@/components/common/NavBar.vue'
 import { sendAIRequest } from '@/utils/aiService'
+import { parseAIJsonArray } from '@/utils/aiJsonParser'
 import { useSettingsStore } from '@/stores/settings'
 
 const router = useRouter()
@@ -393,8 +394,8 @@ const generateBatchCharacters = async () => {
       if (content.startsWith('```')) {
         content = content.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '')
       }
-      parsed = JSON.parse(content)
-      if (!Array.isArray(parsed)) {
+      parsed = parseAIJsonArray(content, { allowSingleObject: true })
+      if (!Array.isArray(parsed) || parsed.length === 0) {
         throw new Error('返回格式不是数组')
       }
     } catch {
