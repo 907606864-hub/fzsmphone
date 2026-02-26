@@ -55,11 +55,12 @@ function handleBack() {
 
 <style scoped>
 .navbar {
-  height: 44px;
+  --status-bar-height: 54px;
+  height: calc(var(--status-bar-height) + 44px);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px;
+  padding: var(--status-bar-height) 8px 0;
   background: var(--bg-primary);
   border-bottom: 0.5px solid var(--separator);
   flex-shrink: 0;
