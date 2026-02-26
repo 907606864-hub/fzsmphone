@@ -386,8 +386,9 @@ function clearAllData() {
 }
 
 .cover-top-bar {
+  --status-bar-height: 54px;
   position: absolute;
-  top: 0;
+  top: var(--status-bar-height);
   left: 0;
   right: 0;
   display: flex;

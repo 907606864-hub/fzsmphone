@@ -389,10 +389,12 @@ function clearAllData() {
 
 /* ===== 顶部导航 ===== */
 .weibo-header {
+  --status-bar-height: 54px;
+  height: calc(var(--status-bar-height) + 44px);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: var(--status-bar-height) 14px 0;
   background: #fff;
   border-bottom: 1px solid #f0f0f0;
   flex-shrink: 0;
