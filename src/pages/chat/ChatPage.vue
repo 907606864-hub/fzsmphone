@@ -14,13 +14,13 @@
 
     <!-- No API Key warning -->
     <div v-if="!settingsStore.settings.apiKey" class="api-warning" @click="goToSettings">
-      <span>⚠️ 未配置 API Key，点击前往设置</span>
+      <span>未配置 API Key，点击前往设置</span>
     </div>
 
     <!-- Active Preset indicator -->
     <div v-if="activePresetName" class="preset-indicator">
-      <span>🎭 预设：{{ activePresetName }}</span>
-      <span v-if="userPersonaName" class="persona-tag">👤 {{ userPersonaName }}</span>
+      <span>预设：{{ activePresetName }}</span>
+      <span v-if="userPersonaName" class="persona-tag">{{ userPersonaName }}</span>
     </div>
 
     <!-- Messages -->
@@ -44,18 +44,78 @@
             <!-- AI Avatar -->
             <div class="msg-avatar" v-if="msg.role === 'assistant'">
               <img v-if="characterAvatar" :src="characterAvatar" class="avatar-img" />
-              <span v-else class="avatar-emoji">🤖</span>
+              <span v-else class="avatar-fallback">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+              </span>
             </div>
 
-            <!-- Bubble -->
-            <div class="msg-bubble" :class="msg.role">
+            <!-- Transfer Card -->
+            <div v-if="msg.msg_type === 'transfer'" class="transfer-card" :class="msg.role" @click="handleTransferClick(msg)">
+              <div class="transfer-card-body">
+                <div class="transfer-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2">
+                    <rect x="2" y="4" width="20" height="16" rx="3"/>
+                    <path d="M2 10h20"/>
+                    <path d="M6 16h4"/>
+                  </svg>
+                </div>
+                <div class="transfer-info">
+                  <div class="transfer-amount">¥{{ getTransferExtra(msg).amount?.toFixed(2) }}</div>
+                  <div class="transfer-note">{{ getTransferExtra(msg).note || '转账' }}</div>
+                </div>
+              </div>
+              <div class="transfer-footer">
+                <span v-if="msg.role === 'user'">
+                  {{ getTransferExtra(msg).accepted ? '已被领取' : '待领取' }}
+                </span>
+                <span v-else>
+                  {{ getTransferExtra(msg).accepted ? '已收款' : '点击收款' }}
+                </span>
+              </div>
+              <span class="msg-time">{{ formatMsgTime(msg.created_at) }}</span>
+            </div>
+
+            <!-- Red Packet Card -->
+            <div v-else-if="msg.msg_type === 'redpacket'" class="redpacket-card" :class="[msg.role, { opened: getRedPacketExtra(msg).opened }]" @click="handleRedPacketClick(msg)">
+              <div class="rp-card-body">
+                <div class="rp-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2">
+                    <rect x="3" y="1" width="18" height="22" rx="3"/>
+                    <line x1="3" y1="10" x2="21" y2="10"/>
+                    <circle cx="12" cy="10" r="3" fill="#fff" stroke="none"/>
+                    <path d="M12 7v6" stroke="#E6162D" stroke-width="1.5"/>
+                    <path d="M9 10h6" stroke="#E6162D" stroke-width="1.5"/>
+                  </svg>
+                </div>
+                <div class="rp-info">
+                  <div class="rp-note">{{ getRedPacketExtra(msg).note || '恭喜发财，大吉大利' }}</div>
+                  <div class="rp-status" v-if="getRedPacketExtra(msg).opened">
+                    已领取 ¥{{ getRedPacketExtra(msg).amount?.toFixed(2) }}
+                  </div>
+                </div>
+              </div>
+              <div class="rp-footer">
+                <span v-if="msg.role === 'user'">
+                  {{ getRedPacketExtra(msg).opened ? '红包已被领取' : '红包' }}
+                </span>
+                <span v-else>
+                  {{ getRedPacketExtra(msg).opened ? '已拆开' : '点击拆开红包' }}
+                </span>
+              </div>
+              <span class="msg-time rp-time">{{ formatMsgTime(msg.created_at) }}</span>
+            </div>
+
+            <!-- Normal Bubble -->
+            <div v-else class="msg-bubble" :class="msg.role">
               <p class="msg-text">{{ msg.content }}</p>
               <span class="msg-time">{{ formatMsgTime(msg.created_at) }}</span>
             </div>
 
             <!-- User avatar -->
             <div class="msg-avatar" v-if="msg.role === 'user'">
-              <span class="avatar-emoji user-avatar">😊</span>
+              <span class="avatar-fallback user-avatar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+              </span>
             </div>
           </div>
         </TransitionGroup>
@@ -64,7 +124,9 @@
         <div v-if="isTyping" class="message-row is-assistant">
           <div class="msg-avatar">
             <img v-if="characterAvatar" :src="characterAvatar" class="avatar-img" />
-            <span v-else class="avatar-emoji">🤖</span>
+            <span v-else class="avatar-fallback">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+            </span>
           </div>
           <div class="msg-bubble assistant typing-bubble">
             <div v-if="streamingText" class="msg-text">{{ streamingText }}</div>
@@ -141,16 +203,146 @@
             </svg>
             <span>Roll (重新生成)</span>
           </button>
+          <button class="action-menu-item" @click="openTransferModal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="4" width="20" height="16" rx="3"/>
+              <path d="M2 10h20"/>
+              <path d="M6 16h4"/>
+            </svg>
+            <span>转账</span>
+          </button>
+          <button class="action-menu-item" @click="openRedPacketModal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="1" width="18" height="22" rx="3"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+              <circle cx="12" cy="10" r="3"/>
+            </svg>
+            <span>红包</span>
+          </button>
         </div>
       </Transition>
     </div>
+
+    <!-- Transfer Modal -->
+    <Transition name="modal-fade">
+      <div v-if="showTransferModal" class="modal-overlay" @click.self="showTransferModal = false">
+        <div class="payment-modal">
+          <div class="payment-modal-header">
+            <span class="payment-modal-title">转账</span>
+            <button class="payment-close-btn" @click="showTransferModal = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="payment-modal-body">
+            <div class="payment-target">
+              转账给 <strong>{{ chatTitle }}</strong>
+            </div>
+            <div class="payment-amount-input">
+              <span class="payment-currency">¥</span>
+              <input
+                ref="transferAmountRef"
+                v-model="transferAmount"
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="0.00"
+                class="amount-input"
+              />
+            </div>
+            <div class="payment-balance">余额：¥{{ walletStore.balance.toFixed(2) }}</div>
+            <div class="payment-note-row">
+              <input
+                v-model="transferNote"
+                type="text"
+                placeholder="添加转账说明"
+                class="note-input"
+                maxlength="30"
+              />
+            </div>
+            <button
+              class="payment-confirm-btn transfer-confirm"
+              :disabled="!isTransferValid"
+              @click="confirmTransfer"
+            >
+              确认转账
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Red Packet Modal -->
+    <Transition name="modal-fade">
+      <div v-if="showRedPacketModal" class="modal-overlay" @click.self="showRedPacketModal = false">
+        <div class="payment-modal rp-modal">
+          <div class="payment-modal-header rp-header">
+            <span class="payment-modal-title">发红包</span>
+            <button class="payment-close-btn" @click="showRedPacketModal = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="payment-modal-body">
+            <div class="payment-amount-input">
+              <span class="payment-currency rp-currency">¥</span>
+              <input
+                ref="rpAmountRef"
+                v-model="rpAmount"
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="0.00"
+                class="amount-input"
+              />
+            </div>
+            <div class="payment-balance">余额：¥{{ walletStore.balance.toFixed(2) }}</div>
+            <div class="payment-note-row">
+              <input
+                v-model="rpNote"
+                type="text"
+                placeholder="恭喜发财，大吉大利"
+                class="note-input"
+                maxlength="30"
+              />
+            </div>
+            <button
+              class="payment-confirm-btn rp-confirm"
+              :disabled="!isRpValid"
+              @click="confirmRedPacket"
+            >
+              塞钱进红包
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Red Packet Open Animation -->
+    <Transition name="modal-fade">
+      <div v-if="showRpOpenResult" class="modal-overlay" @click.self="showRpOpenResult = false">
+        <div class="rp-open-result">
+          <div class="rp-open-icon">
+            <svg viewBox="0 0 64 64" fill="none">
+              <rect x="8" y="2" width="48" height="60" rx="8" fill="#E6162D"/>
+              <rect x="8" y="2" width="48" height="26" rx="8" fill="#CC1228"/>
+              <circle cx="32" cy="28" r="10" fill="#FFD700"/>
+              <path d="M32 22v12M26 28h12" stroke="#E6162D" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="rp-open-sender">{{ rpOpenSender }} 的红包</div>
+          <div class="rp-open-amount">¥{{ rpOpenAmount.toFixed(2) }}</div>
+          <button class="rp-open-close" @click="showRpOpenResult = false">知道了</button>
+        </div>
+      </div>
+    </Transition>
 
     <!-- Info Panel -->
     <div v-if="showInfo" class="info-overlay" @click.self="showInfo = false">
       <div class="info-panel">
         <div class="info-header">
           <h3>聊天信息</h3>
-          <span class="close-btn" @click="showInfo = false">✕</span>
+          <span class="close-btn" @click="showInfo = false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </span>
         </div>
         <div class="info-body">
           <div class="info-section" v-if="currentCharacter">
@@ -171,8 +363,8 @@
             <div class="info-value">{{ matchedWorldBookCount }} 个条目已注入</div>
           </div>
           <div class="info-actions">
-            <button class="info-action-btn" @click="clearChat">🗑️ 清空聊天记录</button>
-            <button class="info-action-btn" @click="regenerateLast">🔄 重新生成最后回复</button>
+            <button class="info-action-btn" @click="clearChat">清空聊天记录</button>
+            <button class="info-action-btn" @click="regenerateLast">重新生成最后回复</button>
           </div>
         </div>
       </div>
@@ -186,6 +378,8 @@ import { useRoute, useRouter } from 'vue-router'
 import NavBar from '@/components/common/NavBar.vue'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
+import { useWalletStore } from '@/stores/wallet'
+import type { ChatMessage } from '@/stores/chat'
 import {
   sendAIRequest,
   buildFullMessages,
@@ -202,9 +396,12 @@ const route = useRoute()
 const router = useRouter()
 const chatStore = useChatStore()
 const settingsStore = useSettingsStore()
+const walletStore = useWalletStore()
 
 const messagesRef = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLTextAreaElement | null>(null)
+const transferAmountRef = ref<HTMLInputElement | null>(null)
+const rpAmountRef = ref<HTMLInputElement | null>(null)
 const inputText = ref('')
 const isTyping = ref(false)
 const streamingText = ref('')
@@ -213,6 +410,30 @@ const showEmojiPanel = ref(false)
 const showActionMenu = ref(false)
 const matchedWorldBookCount = ref(0)
 let abortController: AbortController | null = null
+
+// Transfer/Red Packet modals
+const showTransferModal = ref(false)
+const transferAmount = ref<number | string>('')
+const transferNote = ref('')
+
+const showRedPacketModal = ref(false)
+const rpAmount = ref<number | string>('')
+const rpNote = ref('')
+
+// Red Packet open result
+const showRpOpenResult = ref(false)
+const rpOpenAmount = ref(0)
+const rpOpenSender = ref('')
+
+const isTransferValid = computed(() => {
+  const amt = Number(transferAmount.value)
+  return amt > 0 && amt <= walletStore.balance
+})
+
+const isRpValid = computed(() => {
+  const amt = Number(rpAmount.value)
+  return amt > 0 && amt <= walletStore.balance
+})
 
 const conversationId = computed(() => {
   const id = route.params.friendId || route.params.id
@@ -223,12 +444,9 @@ const conversationId = computed(() => {
 const currentCharacter = computed((): CharacterData | null => {
   const conv = chatStore.currentConversation
   if (!conv) return null
-
-  // 从 localStorage 获取完整角色数据
   if (conv.characterId) {
     return getCharacterById(conv.characterId)
   }
-
   return conv.character as CharacterData | null
 })
 
@@ -243,17 +461,24 @@ const chatTitle = computed(() => {
     || '聊天'
 })
 
-// 预设名称
 const activePresetName = computed(() => {
   const preset = getActivePreset()
   return preset?.name || ''
 })
 
-// 用户人设名称
 const userPersonaName = computed(() => {
   const persona = getCurrentUserPersona()
   return persona?.name || ''
 })
+
+// Helpers for extra data
+function getTransferExtra(msg: ChatMessage) {
+  return (msg.extra || {}) as { transferId?: string; amount?: number; note?: string; accepted?: boolean }
+}
+
+function getRedPacketExtra(msg: ChatMessage) {
+  return (msg.extra || {}) as { rpId?: string; amount?: number; note?: string; opened?: boolean; sender?: string }
+}
 
 function formatDate(dateStr: string | number): string {
   if (!dateStr) return ''
@@ -284,9 +509,7 @@ function scrollToBottom(smooth = true) {
   })
 }
 
-function handleScroll() {
-  // 可实现上拉加载更多
-}
+function handleScroll() {}
 
 function autoResize() {
   const el = inputRef.value
@@ -310,20 +533,185 @@ function goToSettings() {
   router.push('/customize')
 }
 
+// === Transfer ===
+function openTransferModal() {
+  showActionMenu.value = false
+  transferAmount.value = ''
+  transferNote.value = ''
+  showTransferModal.value = true
+  nextTick(() => transferAmountRef.value?.focus())
+}
+
+function confirmTransfer() {
+  if (!conversationId.value || !isTransferValid.value) return
+
+  const amt = Number(transferAmount.value)
+  const note = transferNote.value.trim() || '转账'
+  const targetName = chatTitle.value
+
+  const tf = walletStore.sendTransfer(amt, note, conversationId.value, targetName)
+  if (!tf) return
+
+  showTransferModal.value = false
+
+  // Add transfer message (user)
+  const msg: ChatMessage = {
+    id: `user-tf-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    conversation_id: conversationId.value,
+    role: 'user',
+    content: `[转账] ¥${amt.toFixed(2)} - ${note}`,
+    msg_type: 'transfer',
+    extra: { transferId: tf.id, amount: amt, note, accepted: false },
+    created_at: new Date().toISOString(),
+    timestamp: Date.now(),
+  }
+  chatStore.currentMessages.push(msg)
+  chatStore.saveMessages(conversationId.value)
+
+  // Update conversation preview
+  const conv = chatStore.conversations.find((c: any) => c.id === conversationId.value)
+  if (conv) {
+    conv.last_message = `[转账] ¥${amt.toFixed(2)}`
+    conv.last_at = msg.created_at
+    chatStore.saveConversations()
+  }
+
+  scrollToBottom()
+
+  // Trigger AI reply with transfer context
+  triggerAIReplyWithContext(`[用户给你转了 ${amt.toFixed(2)} 元，备注：${note}，请自然地回应收到转账]`)
+
+  // Mark transfer as accepted after AI processes it
+  setTimeout(() => {
+    const targetMsg = chatStore.currentMessages.find((m: ChatMessage) => m.id === msg.id)
+    if (targetMsg && targetMsg.extra) {
+      (targetMsg.extra as any).accepted = true
+      chatStore.saveMessages(conversationId.value!)
+    }
+    walletStore.acceptTransfer(tf.id)
+  }, 3000)
+}
+
+// === Red Packet ===
+function openRedPacketModal() {
+  showActionMenu.value = false
+  rpAmount.value = ''
+  rpNote.value = ''
+  showRedPacketModal.value = true
+  nextTick(() => rpAmountRef.value?.focus())
+}
+
+function confirmRedPacket() {
+  if (!conversationId.value || !isRpValid.value) return
+
+  const amt = Number(rpAmount.value)
+  const note = rpNote.value.trim() || '恭喜发财，大吉大利'
+
+  const rp = walletStore.sendRedPacket(amt, note, conversationId.value)
+  if (!rp) return
+
+  showRedPacketModal.value = false
+
+  // Add red packet message (user)
+  const msg: ChatMessage = {
+    id: `user-rp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    conversation_id: conversationId.value,
+    role: 'user',
+    content: `[红包] ${note}`,
+    msg_type: 'redpacket',
+    extra: { rpId: rp.id, amount: amt, note, opened: false, sender: 'user' },
+    created_at: new Date().toISOString(),
+    timestamp: Date.now(),
+  }
+  chatStore.currentMessages.push(msg)
+  chatStore.saveMessages(conversationId.value)
+
+  const conv = chatStore.conversations.find((c: any) => c.id === conversationId.value)
+  if (conv) {
+    conv.last_message = `[红包] ${note}`
+    conv.last_at = msg.created_at
+    chatStore.saveConversations()
+  }
+
+  scrollToBottom()
+
+  // Trigger AI reply - AI "opens" the red packet
+  triggerAIReplyWithContext(`[用户发了一个 ${amt.toFixed(2)} 元的红包，祝福语：${note}，请自然地回应并表示收到了红包]`)
+
+  // Mark as opened by AI after a delay
+  setTimeout(() => {
+    const targetMsg = chatStore.currentMessages.find((m: ChatMessage) => m.id === msg.id)
+    if (targetMsg && targetMsg.extra) {
+      (targetMsg.extra as any).opened = true
+      chatStore.saveMessages(conversationId.value!)
+    }
+  }, 3000)
+}
+
+// Handle clicking on transfer card (AI's transfer - user accepts)
+function handleTransferClick(msg: ChatMessage) {
+  if (msg.role !== 'assistant') return
+  const extra = getTransferExtra(msg)
+  if (extra.accepted) return
+
+  // Accept the transfer
+  if (extra.transferId) {
+    walletStore.acceptTransfer(extra.transferId)
+  }
+  // Add amount to balance
+  if (extra.amount) {
+    walletStore.topUp(extra.amount)
+  }
+  ;(msg.extra as any).accepted = true
+  if (conversationId.value) {
+    chatStore.saveMessages(conversationId.value)
+  }
+}
+
+// Handle clicking on red packet card (AI's red packet - user opens)
+function handleRedPacketClick(msg: ChatMessage) {
+  if (msg.role !== 'assistant') return
+  const extra = getRedPacketExtra(msg)
+  if (extra.opened) return
+
+  const amount = extra.amount || 0
+  if (amount <= 0) return
+
+  // Open the red packet
+  ;(msg.extra as any).opened = true
+  if (conversationId.value) {
+    chatStore.saveMessages(conversationId.value)
+  }
+
+  // Add to balance
+  walletStore.topUp(amount)
+
+  // Show open result
+  rpOpenAmount.value = amount
+  rpOpenSender.value = extra.sender || chatTitle.value
+  showRpOpenResult.value = true
+}
+
 // 构建消息历史给 AI
-function buildMessageHistory(): AIMessage[] {
+function buildMessageHistory(extraSystemHint?: string): AIMessage[] {
   const character = currentCharacter.value
 
-  // 获取最近消息上下文
   const recent: AIMessage[] = chatStore.currentMessages
-    .filter(m => m.role === 'user' || m.role === 'assistant')
+    .filter((m: ChatMessage) => m.role === 'user' || m.role === 'assistant')
     .slice(-10)
-    .map(m => ({
+    .map((m: ChatMessage) => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
     }))
 
-  // 使用 buildFullMessages 构建完整消息列表
+  // If there's an extra system hint (transfer/redpacket context), append it
+  if (extraSystemHint) {
+    recent.push({
+      role: 'user',
+      content: extraSystemHint,
+    })
+  }
+
   return buildFullMessages(
     character,
     recent,
@@ -341,33 +729,39 @@ async function handleSend() {
     inputRef.value.style.height = 'auto'
   }
 
-  // 添加用户消息
   chatStore.addMessage(conversationId.value, 'user', text)
   scrollToBottom()
 
-  // 检查 API Key
   const s = settingsStore.settings
   if (!s.apiKey) {
-    chatStore.addMessage(conversationId.value, 'assistant', '⚠️ 请先在设置中配置 API Key 才能和我聊天哦~')
+    chatStore.addMessage(conversationId.value, 'assistant', '请先在设置中配置 API Key 才能和我聊天')
     scrollToBottom()
     return
   }
 
-  // 调用 AI
+  await doAIReply()
+}
+
+async function doAIReply(extraSystemHint?: string) {
+  if (!conversationId.value) return
+
+  const s = settingsStore.settings
+  if (!s.apiKey) return
+
   isTyping.value = true
   streamingText.value = ''
   abortController = new AbortController()
 
   try {
-    const aiMessages = buildMessageHistory()
+    const aiMessages = buildMessageHistory(extraSystemHint)
 
-    // 更新世界书匹配计数
+    // Update world book count
     const character = currentCharacter.value
     const allEntries = getCharacterWorldBookEntries(character?.id, character?.worldBooks)
     const recentText = chatStore.currentMessages
-      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .filter((m: ChatMessage) => m.role === 'user' || m.role === 'assistant')
       .slice(-10)
-      .map(m => m.content)
+      .map((m: ChatMessage) => m.content)
       .join(' ')
     const matched = matchWorldBookEntries(recentText, allEntries)
     matchedWorldBookCount.value = matched.length
@@ -405,7 +799,6 @@ async function handleSend() {
       return
     }
 
-    // 分段发送
     if (s.enableSplit) {
       const segments = splitIntoSegments(content)
       for (let i = 0; i < segments.length; i++) {
@@ -429,11 +822,24 @@ async function handleSend() {
       return
     }
 
-    chatStore.addMessage(conversationId.value!, 'assistant', `❌ AI 回复失败：${err.message}`)
+    chatStore.addMessage(conversationId.value!, 'assistant', `AI 回复失败：${err.message}`)
     scrollToBottom()
   } finally {
     abortController = null
   }
+}
+
+async function triggerAIReplyWithContext(contextHint: string) {
+  if (!conversationId.value) return
+
+  const s = settingsStore.settings
+  if (!s.apiKey) {
+    chatStore.addMessage(conversationId.value, 'assistant', '请先在设置中配置 API Key')
+    scrollToBottom()
+    return
+  }
+
+  await doAIReply(contextHint)
 }
 
 function clearChat() {
@@ -443,7 +849,6 @@ function clearChat() {
   chatStore.currentMessages.splice(0)
   chatStore.saveMessages(conversationId.value)
 
-  // 如果角色有开场白，重新添加
   const char = currentCharacter.value
   if (char?.firstMessage) {
     chatStore.addMessage(conversationId.value, 'assistant', char.firstMessage)
@@ -453,86 +858,9 @@ function clearChat() {
   scrollToBottom(false)
 }
 
-// 等待回复 - 不输入内容，直接触发AI回复
-async function triggerAIReply() {
-  if (!conversationId.value) return
-
-  const s = settingsStore.settings
-  if (!s.apiKey) {
-    chatStore.addMessage(conversationId.value, 'assistant', '⚠️ 请先在设置中配置 API Key 才能和我聊天哦~')
-    scrollToBottom()
-    return
-  }
-
-  isTyping.value = true
-  streamingText.value = ''
-  abortController = new AbortController()
-
-  try {
-    const aiMessages = buildMessageHistory()
-    const apiUrl = settingsStore.getApiUrl()
-    const isStream = s.streamEnabled
-
-    const response = await sendAIRequest({
-      apiKey: s.apiKey,
-      apiUrl: apiUrl,
-      model: s.model,
-      messages: aiMessages,
-      temperature: s.temperature,
-      maxTokens: s.maxLength,
-      stream: isStream,
-      timeout: s.timeout,
-      signal: abortController.signal,
-      onChunk: (chunk: string) => {
-        streamingText.value += chunk
-        scrollToBottom()
-      },
-    })
-
-    isTyping.value = false
-    const content = isStream ? streamingText.value.trim() : response.content
-    streamingText.value = ''
-
-    if (!content) {
-      chatStore.addMessage(
-        conversationId.value!,
-        'assistant',
-        '(AI 没有返回文本内容，可能是模型拒答/上下文过长/流式异常，请重试或切换模型)'
-      )
-      scrollToBottom()
-      return
-    }
-
-    if (s.enableSplit) {
-      const segments = splitIntoSegments(content)
-      for (let i = 0; i < segments.length; i++) {
-        if (i > 0) {
-          isTyping.value = true
-          await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 500))
-          isTyping.value = false
-        }
-        chatStore.addMessage(conversationId.value!, 'assistant', segments[i])
-        scrollToBottom()
-      }
-    } else {
-      chatStore.addMessage(conversationId.value!, 'assistant', content)
-      scrollToBottom()
-    }
-  } catch (err: any) {
-    isTyping.value = false
-    streamingText.value = ''
-    if (err.name !== 'AbortError') {
-      chatStore.addMessage(conversationId.value!, 'assistant', `❌ AI 回复失败：${err.message}`)
-      scrollToBottom()
-    }
-  } finally {
-    abortController = null
-  }
-}
-
 function handleWaitReply() {
   showActionMenu.value = false
-  triggerAIReply()
+  triggerAIReplyWithContext('')
 }
 
 function handleRoll() {
@@ -543,7 +871,6 @@ function handleRoll() {
 async function regenerateLast() {
   if (!conversationId.value) return
   
-  // 删除最后一条 assistant 消息
   const msgs = chatStore.currentMessages
   for (let i = msgs.length - 1; i >= 0; i--) {
     if (msgs[i].role === 'assistant') {
@@ -554,57 +881,13 @@ async function regenerateLast() {
   chatStore.saveMessages(conversationId.value)
   showInfo.value = false
 
-  // 找到最后一条用户消息来重新生成
-  const lastUserMsg = [...msgs].reverse().find(m => m.role === 'user')
+  const lastUserMsg = [...msgs].reverse().find((m: ChatMessage) => m.role === 'user')
   if (!lastUserMsg) return
 
-  // 检查 API Key
   const s = settingsStore.settings
   if (!s.apiKey) return
 
-  isTyping.value = true
-  streamingText.value = ''
-  abortController = new AbortController()
-
-  try {
-    const aiMessages = buildMessageHistory()
-    const apiUrl = settingsStore.getApiUrl()
-    const isStream = s.streamEnabled
-
-    const response = await sendAIRequest({
-      apiKey: s.apiKey,
-      apiUrl: apiUrl,
-      model: s.model,
-      messages: aiMessages,
-      temperature: s.temperature,
-      maxTokens: s.maxLength,
-      stream: isStream,
-      timeout: s.timeout,
-      signal: abortController.signal,
-      onChunk: (chunk: string) => {
-        streamingText.value += chunk
-        scrollToBottom()
-      },
-    })
-
-    isTyping.value = false
-    const content = isStream ? streamingText.value.trim() : response.content
-    streamingText.value = ''
-
-    if (content) {
-      chatStore.addMessage(conversationId.value!, 'assistant', content)
-      scrollToBottom()
-    }
-  } catch (err: any) {
-    isTyping.value = false
-    streamingText.value = ''
-    if (err.name !== 'AbortError') {
-      chatStore.addMessage(conversationId.value!, 'assistant', `❌ 重新生成失败：${err.message}`)
-      scrollToBottom()
-    }
-  } finally {
-    abortController = null
-  }
+  await doAIReply()
 }
 
 watch(
@@ -733,13 +1016,28 @@ onUnmounted(() => {
   border-radius: 50%;
 }
 
-.avatar-emoji {
-  font-size: 28px;
-  line-height: 1;
+.avatar-fallback {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--fill-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.user-avatar {
-  font-size: 26px;
+.avatar-fallback svg {
+  width: 22px;
+  height: 22px;
+  color: var(--text-tertiary);
+}
+
+.avatar-fallback.user-avatar {
+  background: var(--brand-primary, #007aff);
+}
+
+.avatar-fallback.user-avatar svg {
+  color: #fff;
 }
 
 /* Bubble */
@@ -781,6 +1079,168 @@ onUnmounted(() => {
 
 .msg-bubble.user .msg-time {
   color: rgba(255, 255, 255, 0.7);
+}
+
+/* === Transfer Card === */
+.transfer-card {
+  width: 240px;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.transfer-card:active {
+  transform: scale(0.97);
+}
+
+.transfer-card.user {
+  background: linear-gradient(135deg, #5B6EF5, #8B5CF6);
+  color: #fff;
+}
+
+.transfer-card.assistant {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.transfer-card-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.transfer-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.transfer-card.user .transfer-icon {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.transfer-card.assistant .transfer-icon {
+  background: linear-gradient(135deg, #5B6EF5, #8B5CF6);
+}
+
+.transfer-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.transfer-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.transfer-amount {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.transfer-note {
+  font-size: 13px;
+  opacity: 0.8;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transfer-footer {
+  padding: 8px 16px;
+  font-size: 12px;
+  opacity: 0.7;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.transfer-card.assistant .transfer-footer {
+  border-top-color: var(--separator);
+}
+
+.transfer-card .msg-time {
+  padding: 0 16px 8px;
+  font-size: 11px;
+  opacity: 0.5;
+}
+
+/* === Red Packet Card === */
+.redpacket-card {
+  width: 240px;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.15s;
+  background: linear-gradient(135deg, #E6162D, #FF4757);
+  color: #fff;
+}
+
+.redpacket-card:active {
+  transform: scale(0.97);
+}
+
+.redpacket-card.opened {
+  opacity: 0.75;
+}
+
+.rp-card-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+}
+
+.rp-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.rp-icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.rp-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.rp-note {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.rp-status {
+  font-size: 13px;
+  opacity: 0.8;
+  margin-top: 4px;
+}
+
+.rp-footer {
+  padding: 8px 16px;
+  font-size: 12px;
+  opacity: 0.7;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.rp-time {
+  padding: 0 16px 8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 /* Typing */
@@ -957,6 +1417,11 @@ onUnmounted(() => {
   border: none;
 }
 
+.close-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
 .info-body {
   flex: 1;
   overflow-y: auto;
@@ -1092,6 +1557,243 @@ onUnmounted(() => {
 .action-menu-leave-to {
   opacity: 0;
   transform: scale(0.95) translateY(4px);
+}
+
+/* === Payment Modal === */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.payment-modal {
+  width: 320px;
+  background: var(--bg-primary);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.payment-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #5B6EF5, #8B5CF6);
+  color: #fff;
+}
+
+.rp-header {
+  background: linear-gradient(135deg, #E6162D, #FF4757);
+}
+
+.payment-modal-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.payment-close-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #fff;
+}
+
+.payment-close-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.payment-modal-body {
+  padding: 24px 20px;
+}
+
+.payment-target {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.payment-target strong {
+  color: var(--text-primary);
+}
+
+.payment-amount-input {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.payment-currency {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.rp-currency {
+  color: #E6162D;
+}
+
+.amount-input {
+  width: 160px;
+  border: none;
+  border-bottom: 2px solid var(--separator);
+  background: none;
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: center;
+  outline: none;
+  padding: 4px 0;
+  font-family: inherit;
+  -moz-appearance: textfield;
+}
+
+.amount-input::-webkit-outer-spin-button,
+.amount-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.amount-input:focus {
+  border-bottom-color: var(--brand-primary, #007aff);
+}
+
+.payment-balance {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-tertiary);
+  margin-bottom: 16px;
+}
+
+.payment-note-row {
+  margin-bottom: 20px;
+}
+
+.note-input {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--separator);
+  background: none;
+  font-size: 14px;
+  color: var(--text-primary);
+  outline: none;
+  padding: 8px 0;
+  font-family: inherit;
+}
+
+.note-input::placeholder {
+  color: var(--text-quaternary);
+}
+
+.payment-confirm-btn {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.transfer-confirm {
+  background: linear-gradient(135deg, #5B6EF5, #8B5CF6);
+}
+
+.rp-confirm {
+  background: linear-gradient(135deg, #E6162D, #FF4757);
+}
+
+.payment-confirm-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.payment-confirm-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* === Red Packet Open Result === */
+.rp-open-result {
+  width: 280px;
+  background: linear-gradient(180deg, #E6162D 0%, #CC1228 50%, var(--bg-primary) 50%, var(--bg-primary) 100%);
+  border-radius: 20px;
+  overflow: hidden;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.rp-open-icon {
+  padding: 30px 0 10px;
+}
+
+.rp-open-icon svg {
+  width: 64px;
+  height: 64px;
+}
+
+.rp-open-sender {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 8px;
+}
+
+.rp-open-amount {
+  font-size: 40px;
+  font-weight: 700;
+  color: #E6162D;
+  padding: 20px 0;
+}
+
+.rp-open-close {
+  width: calc(100% - 40px);
+  margin: 0 20px 20px;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: var(--fill-tertiary);
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.rp-open-close:active {
+  opacity: 0.7;
+}
+
+/* Modal Transition */
+.modal-fade-enter-active {
+  transition: all 0.25s ease-out;
+}
+.modal-fade-leave-active {
+  transition: all 0.2s ease-in;
+}
+.modal-fade-enter-from {
+  opacity: 0;
+}
+.modal-fade-enter-from .payment-modal,
+.modal-fade-enter-from .rp-open-result {
+  transform: scale(0.9) translateY(20px);
+}
+.modal-fade-leave-to {
+  opacity: 0;
 }
 
 /* Message transition */
