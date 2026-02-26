@@ -51,6 +51,15 @@
           <span class="search-icon">🔍</span>
           <input v-model="searchText" placeholder="搜索条目..." />
         </div>
+        <button class="ai-batch-btn" @click="showAIBatchModal = true" title="AI批量创建条目">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+            <path d="M15 4V2m0 2v2m0-2h2m-2 0h-2"/>
+            <path d="M8 9l3-7 3 7"/>
+            <path d="M6 15l3-3h6l3 3"/>
+            <path d="M4 20h16"/>
+          </svg>
+          <span>AI创建</span>
+        </button>
         <button class="add-entry-btn" @click="openEntryEditor(null)">+ 新条目</button>
       </div>
 
@@ -148,6 +157,42 @@
       </div>
     </div>
 
+    <!-- AI批量创建弹窗 -->
+    <div v-if="showAIBatchModal" class="modal-overlay" @click.self="closeAIBatchModal">
+      <div class="ai-batch-panel">
+        <div class="editor-header">
+          <h3>AI批量创建条目</h3>
+          <span class="close-btn" @click="closeAIBatchModal">✕</span>
+        </div>
+        <div class="editor-body">
+          <div class="form-group">
+            <label>主题描述</label>
+            <textarea
+              v-model="aiBatchPrompt"
+              rows="4"
+              placeholder="描述你想创建的世界书条目主题，例如：&#10;一个奇幻魔法世界的设定，包含各种魔法体系、种族、地理区域等&#10;&#10;或者：&#10;一个赛博朋克城市的背景设定，包含各势力、科技、街区等"
+            ></textarea>
+          </div>
+          <div class="form-group">
+            <label>生成数量</label>
+            <div class="count-selector">
+              <button class="count-btn" @click="aiBatchCount = Math.max(1, aiBatchCount - 1)">-</button>
+              <span class="count-value">{{ aiBatchCount }}</span>
+              <button class="count-btn" @click="aiBatchCount = Math.min(15, aiBatchCount + 1)">+</button>
+            </div>
+          </div>
+          <div v-if="aiBatchError" class="ai-batch-error">{{ aiBatchError }}</div>
+        </div>
+        <div class="editor-footer">
+          <button class="btn-cancel" @click="closeAIBatchModal" :disabled="aiBatchLoading">取消</button>
+          <button class="btn-save" @click="generateBatchEntries" :disabled="aiBatchLoading || !aiBatchPrompt.trim()">
+            <span v-if="aiBatchLoading" class="spinner"></span>
+            <span v-else>生成条目</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 世界书菜单弹窗 -->
     <div v-if="showBookMenu" class="modal-overlay" @click.self="showBookMenu = false">
       <div class="menu-panel">
@@ -188,6 +233,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import NavBar from '@/components/common/NavBar.vue'
+import { sendAIRequest } from '@/utils/aiService'
+import { useSettingsStore } from '@/stores/settings'
 
 interface WorldBookEntry {
   id: string
@@ -216,6 +263,14 @@ const showBookMenu = ref(false)
 const editingEntry = ref<WorldBookEntry | null>(null)
 const keywordsInput = ref('')
 const importInput = ref<HTMLInputElement | null>(null)
+
+// AI批量创建状态
+const showAIBatchModal = ref(false)
+const aiBatchPrompt = ref('')
+const aiBatchCount = ref(5)
+const aiBatchLoading = ref(false)
+const aiBatchError = ref('')
+const settingsStore = useSettingsStore()
 
 const entryForm = ref({
   title: '',
@@ -485,6 +540,90 @@ function handleImport(e: Event) {
   }
   reader.readAsText(file)
   if (importInput.value) importInput.value.value = ''
+}
+
+// AI批量创建
+function closeAIBatchModal() {
+  if (aiBatchLoading.value) return
+  showAIBatchModal.value = false
+  aiBatchPrompt.value = ''
+  aiBatchError.value = ''
+  aiBatchCount.value = 5
+}
+
+async function generateBatchEntries() {
+  if (!currentBook.value) {
+    aiBatchError.value = '请先选择或创建一本世界书'
+    return
+  }
+  if (!aiBatchPrompt.value.trim()) return
+
+  aiBatchLoading.value = true
+  aiBatchError.value = ''
+
+  try {
+    const systemPrompt = `你是一个世界观设定创作助手。用户会给你一个主题描述，你需要根据描述生成${aiBatchCount.value}个世界书条目。
+
+每个条目包含：
+- title: 条目标题（简洁明了）
+- keywords: 触发关键词数组（3-6个相关关键词，当聊天中出现这些词时会触发该条目）
+- content: 条目内容（详细的背景设定描述，150-400字）
+
+请直接输出JSON数组格式，不要包含其他文字说明。
+示例格式：
+[
+  {
+    "title": "火焰魔法",
+    "keywords": ["火焰", "火球", "燃烧", "火系魔法", "火焰术"],
+    "content": "火焰魔法是元素魔法中最常见的一种..."
+  }
+]`
+
+    const result = await sendAIRequest({
+      apiKey: settingsStore.settings.apiKey,
+      apiUrl: settingsStore.getApiUrl(),
+      model: settingsStore.settings.model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `主题：${aiBatchPrompt.value.trim()}\n\n请生成${aiBatchCount.value}个世界书条目。` }
+      ],
+      temperature: 0.8,
+      maxTokens: 4000,
+      stream: false,
+      timeout: settingsStore.settings.timeout || 120,
+    })
+
+    if (!result.content) {
+      throw new Error('AI返回内容为空')
+    }
+
+    let content = result.content.trim()
+    // 去除可能的markdown代码块包裹
+    if (content.startsWith('```')) {
+      content = content.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '')
+    }
+
+    const parsed = JSON.parse(content)
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      throw new Error('AI返回的数据格式不正确')
+    }
+
+    const newEntries: WorldBookEntry[] = parsed.map((item: any, idx: number) => ({
+      id: `entry-${Date.now()}-${idx}`,
+      title: String(item.title || `条目${idx + 1}`),
+      keywords: Array.isArray(item.keywords) ? item.keywords.map(String) : [],
+      content: String(item.content || ''),
+      enabled: true,
+    }))
+
+    currentBook.value.entries.push(...newEntries)
+    saveToStorage()
+    closeAIBatchModal()
+  } catch (err: any) {
+    aiBatchError.value = err.message || '生成失败，请重试'
+  } finally {
+    aiBatchLoading.value = false
+  }
 }
 
 onMounted(() => {
@@ -960,4 +1099,90 @@ onMounted(() => {
 
 .icon-btn:active { opacity: 0.5; }
 .icon-btn svg { width: 22px; height: 22px; }
+
+/* AI批量创建按钮 */
+.ai-batch-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: none;
+  background: var(--bg-tertiary);
+  color: var(--color-primary, #007aff);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.ai-batch-btn:active { opacity: 0.7; }
+
+.ai-batch-btn svg {
+  flex-shrink: 0;
+}
+
+/* AI批量创建弹窗 */
+.ai-batch-panel {
+  width: 100%;
+  max-width: 393px;
+  max-height: 85%;
+  background: var(--bg-primary);
+  border-radius: 20px 20px 0 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.count-selector {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.count-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--separator);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.count-btn:active { opacity: 0.6; }
+
+.count-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 24px;
+  text-align: center;
+}
+
+.ai-batch-error {
+  padding: 10px 12px;
+  background: rgba(255, 59, 48, 0.1);
+  color: #ff3b30;
+  border-radius: 10px;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 </style>

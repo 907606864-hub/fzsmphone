@@ -2,6 +2,14 @@
   <div class="characters-page">
     <NavBar title="角色卡" :show-back="true" back-to="/">
       <template #right>
+        <button class="nav-btn" @click="showAIBatchModal = true" title="AI批量创建">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 4V2" /><path d="M15 16v-2" /><path d="M8 9h2" /><path d="M20 9h2" />
+            <path d="M17.8 11.8L19 13" /><path d="M15 9h0" />
+            <path d="M17.8 6.2L19 5" /><path d="M11 6.2L9.7 5" /><path d="M11 11.8L9.7 13" />
+            <path d="M3 21l9-9" /><path d="M12.2 6.8l2 2" />
+          </svg>
+        </button>
         <button class="nav-btn" @click="importCharacter" title="导入">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -43,6 +51,71 @@
       >
         用户
       </button>
+    </div>
+
+    <!-- AI批量创建弹窗 -->
+    <div v-if="showAIBatchModal" class="modal-overlay" @click.self="closeAIBatchModal">
+      <div class="ai-batch-panel">
+        <div class="ai-batch-header">
+          <h3>AI 批量创建角色</h3>
+          <button class="close-btn" @click="closeAIBatchModal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div class="ai-batch-body">
+          <div class="form-group">
+            <label>主题描述</label>
+            <textarea
+              v-model="aiBatchPrompt"
+              rows="4"
+              placeholder="描述你想要创建的角色主题，例如：&#10;- 一组来自中世纪奇幻世界的冒险者&#10;- 现代都市的几个性格迥异的大学生&#10;- 科幻太空站里的船员们"
+              :disabled="aiBatchLoading"
+            ></textarea>
+          </div>
+          <div class="form-group">
+            <label>创建类型</label>
+            <div class="type-selector">
+              <button
+                :class="{ active: aiBatchType === 'char' }"
+                @click="aiBatchType = 'char'"
+                :disabled="aiBatchLoading"
+              >角色</button>
+              <button
+                :class="{ active: aiBatchType === 'user' }"
+                @click="aiBatchType = 'user'"
+                :disabled="aiBatchLoading"
+              >用户</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>生成数量</label>
+            <div class="quantity-selector">
+              <button @click="aiBatchCount = Math.max(1, aiBatchCount - 1)" :disabled="aiBatchLoading">-</button>
+              <span>{{ aiBatchCount }}</span>
+              <button @click="aiBatchCount = Math.min(10, aiBatchCount + 1)" :disabled="aiBatchLoading">+</button>
+            </div>
+          </div>
+          <div v-if="aiBatchError" class="error-msg">{{ aiBatchError }}</div>
+          <div v-if="aiBatchLoading" class="loading-state">
+            <div class="spinner"></div>
+            <span>AI 正在创建角色，请稍候...</span>
+          </div>
+        </div>
+        <div class="ai-batch-footer">
+          <button class="btn-cancel" @click="closeAIBatchModal" :disabled="aiBatchLoading">取消</button>
+          <button class="btn-generate" @click="generateBatchCharacters" :disabled="aiBatchLoading || !aiBatchPrompt.trim()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon">
+              <path d="M15 4V2" /><path d="M15 16v-2" /><path d="M8 9h2" /><path d="M20 9h2" />
+              <path d="M17.8 11.8L19 13" /><path d="M15 9h0" />
+              <path d="M17.8 6.2L19 5" /><path d="M11 6.2L9.7 5" /><path d="M11 11.8L9.7 13" />
+              <path d="M3 21l9-9" /><path d="M12.2 6.8l2 2" />
+            </svg>
+            生成
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- 内容区 -->
@@ -109,8 +182,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import NavBar from '@/components/common/NavBar.vue'
+import { sendAIRequest } from '@/utils/aiService'
+import { useSettingsStore } from '@/stores/settings'
 
 const router = useRouter()
+const settingsStore = useSettingsStore()
 
 const currentType = ref('char')
 const characters = ref<any[]>([])
@@ -235,6 +311,125 @@ const saveCharacters = () => {
 const loadCharacters = () => {
   const saved = localStorage.getItem('characters')
   if (saved) characters.value = JSON.parse(saved)
+}
+
+// ======== AI 批量创建 ========
+const showAIBatchModal = ref(false)
+const aiBatchPrompt = ref('')
+const aiBatchCount = ref(3)
+const aiBatchType = ref('char')
+const aiBatchLoading = ref(false)
+const aiBatchError = ref('')
+
+const closeAIBatchModal = () => {
+  if (aiBatchLoading.value) return
+  showAIBatchModal.value = false
+  aiBatchError.value = ''
+}
+
+const generateBatchCharacters = async () => {
+  if (!aiBatchPrompt.value.trim()) return
+
+  const apiKey = settingsStore.settings.apiKey
+  const apiUrl = settingsStore.getApiUrl()
+  const model = settingsStore.settings.model
+
+  if (!apiKey || !apiUrl || !model) {
+    aiBatchError.value = '请先在设置中配置 API Key、API 地址和模型'
+    return
+  }
+
+  aiBatchLoading.value = true
+  aiBatchError.value = ''
+
+  const typeLabel = aiBatchType.value === 'char' ? '角色' : '用户角色'
+
+  try {
+    const result = await sendAIRequest({
+      apiKey,
+      apiUrl,
+      model,
+      messages: [
+        {
+          role: 'system',
+          content: `你是一个角色创作助手。用户会给你一个主题描述，你需要根据描述创建${aiBatchCount.value}个${typeLabel}卡。
+
+请严格按照以下 JSON 数组格式输出，不要输出任何其他内容：
+[
+  {
+    "name": "角色名",
+    "description": "一句话简介",
+    "persona": "详细的人设描述，包括性格、外貌、背景等",
+    "scenario": "角色所处的场景或背景设定",
+    "firstMessage": "角色的第一条打招呼消息（用角色口吻）",
+    "exampleDialogue": "示例对话，展示角色说话风格",
+    "tags": ["标签1", "标签2"]
+  }
+]
+
+要求：
+1. 每个角色都要独特，性格各异
+2. 人设描述要丰富，至少100字
+3. 第一条消息要符合角色性格
+4. 示例对话要展现说话风格
+5. 仅输出 JSON，不要有多余文字或 markdown 代码块标记`
+        },
+        {
+          role: 'user',
+          content: `主题：${aiBatchPrompt.value.trim()}\n数量：${aiBatchCount.value}个${typeLabel}`
+        }
+      ],
+      temperature: 0.8,
+      maxTokens: 4000,
+      stream: false,
+      timeout: settingsStore.settings.timeout || 120,
+    })
+
+    // 解析 JSON
+    let parsed: any[]
+    try {
+      let content = result.content.trim()
+      // 移除可能的 markdown 代码块标记
+      if (content.startsWith('```')) {
+        content = content.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '')
+      }
+      parsed = JSON.parse(content)
+      if (!Array.isArray(parsed)) {
+        throw new Error('返回格式不是数组')
+      }
+    } catch {
+      aiBatchError.value = 'AI 返回的格式无法解析，请重试'
+      aiBatchLoading.value = false
+      return
+    }
+
+    // 创建角色卡
+    const newCharacters = parsed.map((item: any) => ({
+      id: Date.now() + Math.floor(Math.random() * 100000),
+      type: aiBatchType.value,
+      name: item.name || '未命名',
+      description: item.description || '',
+      avatar: '',
+      persona: item.persona || '',
+      scenario: item.scenario || '',
+      firstMessage: item.firstMessage || item.first_message || '',
+      exampleDialogue: item.exampleDialogue || item.example_dialogue || '',
+      tags: Array.isArray(item.tags) ? item.tags : [],
+      worldBooks: [],
+    }))
+
+    characters.value.push(...newCharacters)
+    saveCharacters()
+
+    showAIBatchModal.value = false
+    aiBatchPrompt.value = ''
+    aiBatchError.value = ''
+    alert(`成功创建 ${newCharacters.length} 个${typeLabel}`)
+  } catch (err: any) {
+    aiBatchError.value = err.message || 'AI 请求失败，请检查设置后重试'
+  } finally {
+    aiBatchLoading.value = false
+  }
 }
 
 onMounted(() => loadCharacters())
@@ -404,4 +599,224 @@ onMounted(() => loadCharacters())
 .icon-btn.chat-btn { color: var(--brand-primary, #007aff); }
 .icon-btn.edit-btn { color: var(--color-orange, #ff9500); }
 .icon-btn.active-user { color: var(--color-green, #34c759); background: rgba(52, 199, 89, 0.15); }
+
+/* AI 批量创建弹窗 */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 100;
+}
+
+.ai-batch-panel {
+  width: 100%;
+  max-width: 393px;
+  max-height: 85%;
+  background: var(--bg-primary);
+  border-radius: 20px 20px 0 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-batch-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--separator, rgba(0,0,0,0.1));
+}
+
+.ai-batch-header h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.close-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 14px;
+  background: var(--fill-tertiary, rgba(118,118,128,0.12));
+  border: none;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.close-btn svg { width: 16px; height: 16px; }
+
+.ai-batch-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.ai-batch-body .form-group {
+  margin-bottom: 16px;
+}
+
+.ai-batch-body .form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.ai-batch-body textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--separator, rgba(0,0,0,0.1));
+  background: var(--fill-tertiary, rgba(118,118,128,0.12));
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  resize: vertical;
+  box-sizing: border-box;
+  line-height: 1.5;
+}
+
+.ai-batch-body textarea:disabled {
+  opacity: 0.5;
+}
+
+.type-selector {
+  display: flex;
+  gap: 0;
+  background: var(--fill-tertiary, rgba(118,118,128,0.12));
+  border-radius: 9px;
+  padding: 2px;
+}
+
+.type-selector button {
+  flex: 1;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.type-selector button.active {
+  background: var(--bg-primary);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.type-selector button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.quantity-selector {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.quantity-selector button {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--separator, rgba(0,0,0,0.1));
+  background: var(--fill-tertiary, rgba(118,118,128,0.12));
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.quantity-selector button:disabled { opacity: 0.4; cursor: not-allowed; }
+.quantity-selector button:active:not(:disabled) { background: var(--fill-secondary, rgba(118,118,128,0.24)); }
+
+.quantity-selector span {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 30px;
+  text-align: center;
+}
+
+.error-msg {
+  padding: 10px 12px;
+  background: rgba(255, 59, 48, 0.1);
+  border-radius: 10px;
+  color: #ff3b30;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--fill-tertiary, rgba(118,118,128,0.12));
+  border-top-color: var(--brand-primary, #007aff);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.ai-batch-footer {
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--separator, rgba(0,0,0,0.1));
+}
+
+.ai-batch-footer button {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.ai-batch-footer .btn-cancel {
+  background: var(--fill-tertiary, rgba(118,118,128,0.12));
+  color: var(--text-primary);
+}
+
+.ai-batch-footer .btn-generate {
+  background: var(--brand-primary, #007aff);
+  color: #fff;
+}
+
+.ai-batch-footer .btn-generate:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ai-batch-footer .btn-icon {
+  width: 18px;
+  height: 18px;
+}
 </style>
