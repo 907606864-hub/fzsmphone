@@ -76,7 +76,7 @@ fzsmphone/
 
 ### Zeabur 一键部署
 
-[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates?q=fzsmphone)
+[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/7PNREM)
 
 项目已配置 `zeabur-template.yaml` + `Dockerfile` + `zbpack.json`，支持 Zeabur 一键部署。
 
