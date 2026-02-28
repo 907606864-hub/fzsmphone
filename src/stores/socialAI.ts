@@ -21,6 +21,7 @@ import {
   parseTakeawayContent,
   parseShoppingContent,
   parseCoupleContent,
+  parseStockContent,
   generateId,
 } from '@/utils/socialParsers'
 import type {
@@ -41,6 +42,8 @@ import type {
   LoveLetter,
   WishItem,
   FootprintItem,
+  StockIndex,
+  StockItem as StockItemType,
 } from '@/utils/socialParsers'
 
 // ==================== 存储键 ====================
@@ -57,6 +60,7 @@ const STORAGE_KEYS = {
   takeaway: 'social-data-takeaway',
   shopping: 'social-data-shopping',
   couple: 'social-data-couple',
+  stock: 'social-data-stock',
 }
 
 // ==================== AI配置读取 ====================
@@ -132,6 +136,11 @@ export const useSocialAIStore = defineStore('socialAI', () => {
   const coupleFootprints = ref<FootprintItem[]>([])
   const coupleLoading = ref(false)
 
+  // ==================== 股票状态 ====================
+  const stockIndices = ref<StockIndex[]>([])
+  const stockItems = ref<StockItemType[]>([])
+  const stockLoading = ref(false)
+
   // ==================== 通用 ====================
   const generating = ref(false)
   const lastError = ref('')
@@ -183,6 +192,12 @@ export const useSocialAIStore = defineStore('socialAI', () => {
             letters: coupleLetters.value,
             wishes: coupleWishes.value,
             footprints: coupleFootprints.value,
+          }))
+          break
+        case 'stock':
+          localStorage.setItem(STORAGE_KEYS.stock, JSON.stringify({
+            indices: stockIndices.value,
+            stocks: stockItems.value,
           }))
           break
       }
@@ -281,6 +296,15 @@ export const useSocialAIStore = defineStore('socialAI', () => {
             coupleLetters.value = data.letters || []
             coupleWishes.value = data.wishes || []
             coupleFootprints.value = data.footprints || []
+          }
+          break
+        }
+        case 'stock': {
+          const saved = localStorage.getItem(STORAGE_KEYS.stock)
+          if (saved) {
+            const data = JSON.parse(saved)
+            stockIndices.value = data.indices || []
+            stockItems.value = data.stocks || []
           }
           break
         }
@@ -930,6 +954,31 @@ export const useSocialAIStore = defineStore('socialAI', () => {
     }
   }
 
+  // ==================== 股票操作 ====================
+  async function generateStockContent(action?: string) {
+    if (generating.value) return
+    generating.value = true
+    stockLoading.value = true
+    lastError.value = ''
+    try {
+      const raw = await callAI('stock', action)
+      const data = parseStockContent(raw)
+      if (data.stocks.length > 0) {
+        stockIndices.value = data.indices
+        stockItems.value = data.stocks
+        saveData('stock')
+      } else {
+        lastError.value = 'AI未生成有效的股票内容'
+      }
+    } catch (e: any) {
+      lastError.value = e.message || '生成失败'
+      console.error('[SocialAI] 股票生成失败:', e)
+    } finally {
+      generating.value = false
+      stockLoading.value = false
+    }
+  }
+
   // ==================== 清除数据 ====================
   function clearData(type: SocialType) {
     switch (type) {
@@ -973,6 +1022,10 @@ export const useSocialAIStore = defineStore('socialAI', () => {
         coupleLetters.value = []
         coupleWishes.value = []
         coupleFootprints.value = []
+        break
+      case 'stock':
+        stockIndices.value = []
+        stockItems.value = []
         break
     }
     saveData(type)
@@ -1082,6 +1135,12 @@ export const useSocialAIStore = defineStore('socialAI', () => {
     coupleFootprints,
     coupleLoading,
     generateCoupleContent,
+
+    // 股票
+    stockIndices,
+    stockItems,
+    stockLoading,
+    generateStockContent,
 
     // 通用
     generating,

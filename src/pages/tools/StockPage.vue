@@ -1,6 +1,12 @@
 <template>
   <div class="stock-page">
-    <NavBar title="股票行情" />
+    <NavBar title="股票行情">
+      <template #right>
+        <button class="gen-btn" @click="handleGenerate" :disabled="aiStore.generating">
+          {{ aiStore.stockLoading ? 'AI生成中...' : 'AI生成' }}
+        </button>
+      </template>
+    </NavBar>
 
     <!-- 指数概览 -->
     <div class="indices-row">
@@ -137,6 +143,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import NavBar from '@/components/common/NavBar.vue'
+import { useSocialAIStore } from '@/stores/socialAI'
+
+const aiStore = useSocialAIStore()
 
 interface StockItem {
   code: string
@@ -158,14 +167,16 @@ const indices = ref([
   { name: '创业板指', value: 2156.78, change: 1.23 },
 ])
 
-const stocks = ref<StockItem[]>([
+const defaultStocks: StockItem[] = [
   { code: '600519', name: '贵州茅台', price: 1688.50, change: 1.25, volume: '3.2万手', marketCap: '2.12万亿', pe: '33.5' },
   { code: '000858', name: '五粮液', price: 156.80, change: -0.68, volume: '5.8万手', marketCap: '6088亿', pe: '25.2' },
   { code: '601318', name: '中国平安', price: 48.92, change: 0.45, volume: '12.3万手', marketCap: '8945亿', pe: '8.6' },
   { code: '000001', name: '平安银行', price: 12.35, change: -1.12, volume: '28.5万手', marketCap: '2398亿', pe: '5.2' },
   { code: '300750', name: '宁德时代', price: 198.60, change: 2.34, volume: '8.6万手', marketCap: '4856亿', pe: '28.9' },
   { code: '601899', name: '紫金矿业', price: 15.82, change: 0.89, volume: '18.2万手', marketCap: '4168亿', pe: '12.3' },
-])
+]
+
+const stocks = ref<StockItem[]>([...defaultStocks])
 
 const allStocks: StockItem[] = [
   { code: '600036', name: '招商银行', price: 35.20, change: 0.57, volume: '15.6万手', marketCap: '8882亿', pe: '6.8' },
@@ -200,11 +211,6 @@ function addStock(stock: StockItem) {
   saveWatchlist()
 }
 
-function removeStock(code: string) {
-  stocks.value = stocks.value.filter(s => s.code !== code)
-  saveWatchlist()
-}
-
 const STOCK_KEY = 'stock-watchlist'
 
 function saveWatchlist() {
@@ -225,17 +231,44 @@ function loadWatchlist() {
   } catch { /* ignore */ }
 }
 
-// Real-time price simulation
+// AI 生成
+async function handleGenerate() {
+  await aiStore.generateStockContent()
+  applyAIData()
+}
+
+function applyAIData() {
+  if (aiStore.stockIndices.length > 0) {
+    indices.value = aiStore.stockIndices.map(idx => ({
+      name: idx.name,
+      value: idx.value,
+      change: idx.change,
+    }))
+  }
+  if (aiStore.stockItems.length > 0) {
+    stocks.value = aiStore.stockItems.map(s => ({
+      code: s.code,
+      name: s.name,
+      price: s.price,
+      change: s.change,
+      volume: s.volume,
+      marketCap: s.marketCap,
+      pe: s.pe,
+    }))
+  }
+}
+
+// 实时价格模拟
 let priceTimer: ReturnType<typeof setInterval> | null = null
 
 function simulatePrices() {
-  // Fluctuate indices
+  // 指数波动
   indices.value.forEach(idx => {
     const delta = (Math.random() - 0.48) * 0.15
     idx.change = +(idx.change + delta).toFixed(2)
     idx.value = +(idx.value * (1 + delta / 100)).toFixed(2)
   })
-  // Fluctuate stocks
+  // 股票波动
   stocks.value.forEach(s => {
     const delta = (Math.random() - 0.48) * 0.3
     s.change = +(s.change + delta).toFixed(2)
@@ -244,7 +277,13 @@ function simulatePrices() {
 }
 
 onMounted(() => {
-  loadWatchlist()
+  // 加载 AI 缓存数据
+  aiStore.loadData('stock')
+  applyAIData()
+  // 如果没有 AI 数据，走原来的 watchlist 逻辑
+  if (aiStore.stockItems.length === 0) {
+    loadWatchlist()
+  }
   priceTimer = setInterval(simulatePrices, 3000)
 })
 
@@ -260,6 +299,22 @@ onUnmounted(() => {
   flex-direction: column;
   background: var(--bg-primary);
   overflow-y: auto;
+}
+
+.gen-btn {
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gen-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .indices-row {

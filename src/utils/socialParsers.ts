@@ -1524,3 +1524,70 @@ export function parseCoupleContent(raw: string): CoupleData {
   return { letters, wishes, footprints }
 }
 
+// ==================== 股票数据类型 ====================
+
+export interface StockIndex {
+  name: string
+  value: number
+  change: number
+}
+
+export interface StockItem {
+  code: string
+  name: string
+  price: number
+  change: number
+  volume: string
+  marketCap: string
+  pe: string
+}
+
+export interface StockData {
+  indices: StockIndex[]
+  stocks: StockItem[]
+}
+
+// ==================== 股票解析器 ====================
+
+export function parseStockContent(raw: string): StockData {
+  const indices: StockIndex[] = []
+  const stocks: StockItem[] = []
+
+  const startMarker = '<!-- STOCK_CONTENT_START -->'
+  const endMarker = '<!-- STOCK_CONTENT_END -->'
+  const startIdx = raw.indexOf(startMarker)
+  const endIdx = raw.indexOf(endMarker)
+  const content = startIdx >= 0 && endIdx >= 0
+    ? raw.slice(startIdx + startMarker.length, endIdx)
+    : raw
+
+  let m: RegExpExecArray | null
+
+  // [指数|指数名称|数值|涨跌幅]
+  const idxRe = /\[指数\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+  while ((m = idxRe.exec(content)) !== null) {
+    indices.push({
+      name: m[1].trim(),
+      value: parseFloat(m[2].trim()) || 3000,
+      change: parseFloat(m[3].trim()) || 0,
+    })
+  }
+
+  // [股票|代码|名称|价格|涨跌幅|成交量|市值|市盈率]
+  const stockRe = /\[股票\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+  while ((m = stockRe.exec(content)) !== null) {
+    stocks.push({
+      code: m[1].trim(),
+      name: m[2].trim(),
+      price: parseFloat(m[3].trim()) || 100,
+      change: parseFloat(m[4].trim()) || 0,
+      volume: m[5].trim(),
+      marketCap: m[6].trim(),
+      pe: m[7].trim(),
+    })
+  }
+
+  console.log(`[SocialParser] Stock: ${indices.length} indices, ${stocks.length} stocks`)
+  return { indices, stocks }
+}
+

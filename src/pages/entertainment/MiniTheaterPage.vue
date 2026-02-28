@@ -602,7 +602,7 @@ onUnmounted(() => {
 
 .player-top-bar {
   position: absolute;
-  top: 0;
+  top: 44px;
   left: 0;
   right: 0;
   display: flex;
