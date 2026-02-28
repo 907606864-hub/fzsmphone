@@ -169,10 +169,11 @@ export const usePhoneStore = defineStore('phone', () => {
     }
   }
 
-  function generatePhoneNumber(charId: string): string {
+  function generatePhoneNumber(charId: string | number): string {
+    const id = String(charId)
     let hash = 0
-    for (let i = 0; i < charId.length; i++) {
-      hash = ((hash << 5) - hash) + charId.charCodeAt(i)
+    for (let i = 0; i < id.length; i++) {
+      hash = ((hash << 5) - hash) + id.charCodeAt(i)
       hash |= 0
     }
     const num = Math.abs(hash) % 90000000 + 10000000
