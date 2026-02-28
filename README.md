@@ -74,5 +74,26 @@ fzsmphone/
 
 ## 部署
 
-项目已配置 `Dockerfile` + `zbpack.json`，支持 Zeabur 一键部署。也可 `docker-compose up -d` 本地启动全部服务。
+### Zeabur 一键部署
 
+[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates?q=fzsmphone)
+
+项目已配置 `zeabur-template.yaml` + `Dockerfile` + `zbpack.json`，支持 Zeabur 一键部署。
+
+部署时需填写以下变量：
+
+- **JWT Secret** — 用于签名令牌的随机密钥
+- **Discord OAuth 配置** — Client ID / Secret / Redirect URI
+- **域名** — Zeabur 会自动引导绑定
+
+### Docker Compose 本地部署
+
+```bash
+docker-compose up -d
+```
+
+### 使用 Zeabur CLI 部署模板
+
+```bash
+npx zeabur@latest template deploy -f zeabur-template.yaml
+```

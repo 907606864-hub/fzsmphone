@@ -1,0 +1,202 @@
+apiVersion: zeabur.com/v1
+kind: Template
+metadata:
+  name: fzsmphone
+spec:
+  description: >-
+    iOS-style phone simulator web app for immersive social RP.
+    AI-powered chat, social, entertainment, lifestyle & tools — 45+ pages.
+  icon: https://raw.githubusercontent.com/907606864-hub/fzsmphone/master/public/icon.png
+  tags:
+    - Tool
+    - Entertainment
+  variables:
+    - key: PUBLIC_DOMAIN
+      type: DOMAIN
+      name: Domain
+      description: The domain for your fzsmphone instance (e.g. "myphone" → myphone.zeabur.app)
+    - key: JWT_SECRET
+      type: STRING
+      name: JWT Secret
+      description: Secret key used to sign JWT tokens (use a long random string)
+    - key: DISCORD_CLIENT_ID
+      type: STRING
+      name: Discord Client ID
+      description: Your Discord OAuth2 application Client ID
+    - key: DISCORD_CLIENT_SECRET
+      type: STRING
+      name: Discord Client Secret
+      description: Your Discord OAuth2 application Client Secret
+    - key: DISCORD_REDIRECT_URI
+      type: STRING
+      name: Discord Redirect URI
+      description: "Discord OAuth callback URL (e.g. https://your-domain.zeabur.app/auth/callback)"
+    - key: DISCORD_GUILD_ID
+      type: STRING
+      name: Discord Guild ID
+      description: (Optional) Restrict login to a specific Discord server
+    - key: DISCORD_REQUIRED_ROLE_IDS
+      type: STRING
+      name: Discord Required Role IDs
+      description: (Optional) Comma-separated role IDs required for login
+    - key: DISCORD_ADMIN_IDS
+      type: STRING
+      name: Discord Admin IDs
+      description: (Optional) Comma-separated Discord user IDs that are auto-promoted to admin
+  readme: |-
+    # fzsmphone
+
+    高仿 iOS 风格手机模拟器 Web 应用，专为角色扮演和沉浸式社交模拟打造。
+
+    ## ✨ 特性
+
+    - 📱 iOS 风格 UI — 高度还原的手机界面体验
+    - 🤖 AI 驱动 — 集成 OpenAI 兼容 API，智能生成聊天、社交、娱乐内容
+    - 🔐 Discord OAuth — 安全的身份验证和权限控制
+    - 📦 45+ 页面 — 聊天、社交、娱乐、生活、工具五大模块
+    - 🎨 GradientIcon — 原创 CSS 渐变图标系统
+
+    ## 🛠 技术栈
+
+    | 层级 | 技术 |
+    |------|------|
+    | 前端 | Vue 3 + TypeScript + Vite + Pinia |
+    | 后端 | Go 1.22 + Chi v5 + PostgreSQL 16 |
+    | AI | OpenAI 兼容 API（流式 SSE） |
+    | 认证 | Discord OAuth2 + JWT |
+
+    ## ⚙️ 部署后配置
+
+    1. 在 [Discord Developer Portal](https://discord.com/developers/applications) 创建应用
+    2. 将 OAuth2 Redirect URI 设置为 `https://your-domain.zeabur.app/auth/callback`
+    3. 在 Zeabur 环境变量中填入 Discord 相关配置
+
+    ## 📖 更多信息
+
+    查看 [GitHub 仓库](https://github.com/907606864-hub/fzsmphone) 获取详细文档。
+  services:
+    # ---------- PostgreSQL ----------
+    - name: PostgreSQL
+      icon: https://raw.githubusercontent.com/zeabur/service-icons/main/marketplace/postgresql.svg
+      template: PREBUILT
+      spec:
+        source:
+          image: postgres:16-alpine
+        ports:
+          - id: database
+            port: 5432
+            type: TCP
+        volumes:
+          - id: data
+            dir: /var/lib/postgresql/data
+        env:
+          POSTGRES_USER:
+            default: fzsmphone
+            expose: true
+            readonly: true
+          POSTGRES_PASSWORD:
+            default: ${PASSWORD}
+            expose: true
+          POSTGRES_DB:
+            default: fzsmphone
+            expose: true
+            readonly: true
+          POSTGRES_CONNECTION_STRING:
+            default: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
+            expose: true
+            readonly: true
+          POSTGRES_HOST:
+            default: ${CONTAINER_HOSTNAME}
+            expose: true
+            readonly: true
+          POSTGRES_PORT:
+            default: ${DATABASE_PORT}
+            expose: true
+            readonly: true
+        instructions:
+          - type: TEXT
+            title: Connection String
+            content: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${PORT_FORWARDED_HOSTNAME}:${DATABASE_PORT_FORWARDED_PORT}/${POSTGRES_DB}"
+          - type: PASSWORD
+            title: Password
+            content: ${POSTGRES_PASSWORD}
+            category: Credentials
+
+    # ---------- fzsmphone (App) ----------
+    - name: fzsmphone
+      icon: https://raw.githubusercontent.com/907606864-hub/fzsmphone/master/public/icon.png
+      template: GIT
+      domainKey: PUBLIC_DOMAIN
+      dependencies:
+        - PostgreSQL
+      spec:
+        source:
+          type: GITHUB
+          repoID: 1166737063
+          branch: master
+        ports:
+          - id: web
+            port: 8080
+            type: HTTP
+        env:
+          PORT:
+            default: "8080"
+          DATABASE_URL:
+            default: ${POSTGRES_CONNECTION_STRING}
+          JWT_SECRET:
+            default: ${JWT_SECRET}
+          DISCORD_CLIENT_ID:
+            default: ${DISCORD_CLIENT_ID}
+          DISCORD_CLIENT_SECRET:
+            default: ${DISCORD_CLIENT_SECRET}
+          DISCORD_REDIRECT_URI:
+            default: ${DISCORD_REDIRECT_URI}
+          DISCORD_GUILD_ID:
+            default: ${DISCORD_GUILD_ID}
+          DISCORD_REQUIRED_ROLE_IDS:
+            default: ${DISCORD_REQUIRED_ROLE_IDS}
+          DISCORD_ADMIN_IDS:
+            default: ${DISCORD_ADMIN_IDS}
+          FRONTEND_URL:
+            default: https://${PUBLIC_DOMAIN}
+          ENVIRONMENT:
+            default: production
+
+  localization:
+    zh-CN:
+      description: >-
+        高仿 iOS 风格手机模拟器 Web 应用，专为角色扮演和沉浸式社交模拟打造。
+        集成 AI 生成内容，覆盖聊天、社交、娱乐、生活、工具五大模块，45+ 功能页面。
+      variables:
+        - key: PUBLIC_DOMAIN
+          type: DOMAIN
+          name: 域名
+          description: 为你的 fzsmphone 实例设置域名（例如输入 "myphone" → myphone.zeabur.app）
+        - key: JWT_SECRET
+          type: STRING
+          name: JWT 密钥
+          description: 用于签名 JWT 令牌的密钥（请使用长随机字符串）
+        - key: DISCORD_CLIENT_ID
+          type: STRING
+          name: Discord 应用 ID
+          description: 你的 Discord OAuth2 应用的 Client ID
+        - key: DISCORD_CLIENT_SECRET
+          type: STRING
+          name: Discord 应用密钥
+          description: 你的 Discord OAuth2 应用的 Client Secret
+        - key: DISCORD_REDIRECT_URI
+          type: STRING
+          name: Discord 回调地址
+          description: "Discord OAuth 回调 URL（例如 https://你的域名.zeabur.app/auth/callback）"
+        - key: DISCORD_GUILD_ID
+          type: STRING
+          name: Discord 服务器 ID
+          description: （可选）限制登录的 Discord 服务器 ID
+        - key: DISCORD_REQUIRED_ROLE_IDS
+          type: STRING
+          name: Discord 必需身份组 ID
+          description: （可选）用逗号分隔的必需身份组 ID
+        - key: DISCORD_ADMIN_IDS
+          type: STRING
+          name: Discord 管理员 ID
+          description: （可选）用逗号分隔的 Discord 用户 ID，自动升级为管理员
