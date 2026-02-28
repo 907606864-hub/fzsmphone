@@ -223,6 +223,7 @@ convertFromTo()
   display: flex;
   align-items: center;
   gap: 12px;
+  overflow: hidden;
 }
 
 .currency-selector {
@@ -255,6 +256,7 @@ convertFromTo()
 
 .amount-input {
   flex: 1;
+  min-width: 0;
   padding: 12px;
   border: 1px solid var(--border-color);
   border-radius: 12px;
@@ -264,7 +266,11 @@ convertFromTo()
   font-weight: 600;
   text-align: right;
   outline: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  appearance: textfield;
   -moz-appearance: textfield;
+  box-sizing: border-box;
 }
 
 .amount-input::-webkit-outer-spin-button,

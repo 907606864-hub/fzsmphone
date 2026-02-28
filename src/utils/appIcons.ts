@@ -5,7 +5,6 @@
  */
 export const appIcons: Record<string, string> = {
   chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
-  forum: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/><line x1="8" y1="9" x2="10" y2="9"/>',
   weibo: '<path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z"/><path d="M8 12l3 3 5-6"/>',
   qzone: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.66V19a5 5 0 0 1 10 0v1.66"/>',
   takeaway: '<circle cx="6" cy="19" r="2"/><circle cx="17" cy="19" r="2"/><path d="M8 19h7M5 17V7h6l4 5h3v5"/><line x1="7" y1="12" x2="11" y2="12"/>',

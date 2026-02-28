@@ -9,8 +9,6 @@ const routeFeatureMap: Record<string, string> = {
   CharacterEdit: 'characters',
   UserPersonas: 'personas',
   WorldBook: 'worldbook',
-  Forum: 'forum',
-  PostDetail: 'forum',
   Weibo: 'weibo',
   QZone: 'qzone',
   Moments: 'qzone',
@@ -96,16 +94,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/pages/chat/WorldBookPage.vue'),
   },
   // === 社交 ===
-  {
-    path: '/forum',
-    name: 'Forum',
-    component: () => import('@/pages/social/ForumPage.vue'),
-  },
-  {
-    path: '/forum/post/:postId',
-    name: 'PostDetail',
-    component: () => import('@/pages/social/PostDetailPage.vue'),
-  },
   {
     path: '/weibo',
     name: 'Weibo',

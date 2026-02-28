@@ -18,6 +18,8 @@ import {
   parseMusicContent,
   parseLiveContent,
   parseTheaterContent,
+  parseTakeawayContent,
+  parseShoppingContent,
   generateId,
 } from '@/utils/socialParsers'
 import type {
@@ -33,6 +35,8 @@ import type {
   MusicPlaylist,
   LiveStreamer,
   TheaterDrama,
+  TakeawayRestaurant,
+  ShoppingProduct,
 } from '@/utils/socialParsers'
 
 // ==================== 存储键 ====================
@@ -46,6 +50,8 @@ const STORAGE_KEYS = {
   music: 'social-data-music',
   live: 'social-data-live',
   theater: 'social-data-theater',
+  takeaway: 'social-data-takeaway',
+  shopping: 'social-data-shopping',
 }
 
 // ==================== AI配置读取 ====================
@@ -107,6 +113,14 @@ export const useSocialAIStore = defineStore('socialAI', () => {
   const theaterDramas = ref<TheaterDrama[]>([])
   const theaterLoading = ref(false)
 
+  // ==================== 外卖状态 ====================
+  const takeawayRestaurants = ref<TakeawayRestaurant[]>([])
+  const takeawayLoading = ref(false)
+
+  // ==================== 购物状态 ====================
+  const shoppingProducts = ref<ShoppingProduct[]>([])
+  const shoppingLoading = ref(false)
+
   // ==================== 通用 ====================
   const generating = ref(false)
   const lastError = ref('')
@@ -146,6 +160,12 @@ export const useSocialAIStore = defineStore('socialAI', () => {
           break
         case 'theater':
           localStorage.setItem(STORAGE_KEYS.theater, JSON.stringify(theaterDramas.value))
+          break
+        case 'takeaway':
+          localStorage.setItem(STORAGE_KEYS.takeaway, JSON.stringify(takeawayRestaurants.value))
+          break
+        case 'shopping':
+          localStorage.setItem(STORAGE_KEYS.shopping, JSON.stringify(shoppingProducts.value))
           break
       }
     } catch { /* ignore */ }
@@ -219,6 +239,20 @@ export const useSocialAIStore = defineStore('socialAI', () => {
           const saved = localStorage.getItem(STORAGE_KEYS.theater)
           if (saved) {
             theaterDramas.value = JSON.parse(saved)
+          }
+          break
+        }
+        case 'takeaway': {
+          const saved = localStorage.getItem(STORAGE_KEYS.takeaway)
+          if (saved) {
+            takeawayRestaurants.value = JSON.parse(saved)
+          }
+          break
+        }
+        case 'shopping': {
+          const saved = localStorage.getItem(STORAGE_KEYS.shopping)
+          if (saved) {
+            shoppingProducts.value = JSON.parse(saved)
           }
           break
         }
@@ -772,6 +806,54 @@ export const useSocialAIStore = defineStore('socialAI', () => {
     }
   }
 
+  // ==================== 外卖操作 ====================
+  async function generateTakeawayContent(action?: string) {
+    if (generating.value) return
+    generating.value = true
+    takeawayLoading.value = true
+    lastError.value = ''
+    try {
+      const raw = await callAI('takeaway', action)
+      const data = parseTakeawayContent(raw)
+      if (data.restaurants.length > 0) {
+        takeawayRestaurants.value = data.restaurants
+        saveData('takeaway')
+      } else {
+        lastError.value = 'AI未生成有效的外卖内容'
+      }
+    } catch (e: any) {
+      lastError.value = e.message || '生成失败'
+      console.error('[SocialAI] 外卖生成失败:', e)
+    } finally {
+      generating.value = false
+      takeawayLoading.value = false
+    }
+  }
+
+  // ==================== 购物操作 ====================
+  async function generateShoppingContent(action?: string) {
+    if (generating.value) return
+    generating.value = true
+    shoppingLoading.value = true
+    lastError.value = ''
+    try {
+      const raw = await callAI('shopping', action)
+      const data = parseShoppingContent(raw)
+      if (data.products.length > 0) {
+        shoppingProducts.value = data.products
+        saveData('shopping')
+      } else {
+        lastError.value = 'AI未生成有效的购物内容'
+      }
+    } catch (e: any) {
+      lastError.value = e.message || '生成失败'
+      console.error('[SocialAI] 购物生成失败:', e)
+    } finally {
+      generating.value = false
+      shoppingLoading.value = false
+    }
+  }
+
   // ==================== 清除数据 ====================
   function clearData(type: SocialType) {
     switch (type) {
@@ -804,6 +886,12 @@ export const useSocialAIStore = defineStore('socialAI', () => {
         break
       case 'theater':
         theaterDramas.value = []
+        break
+      case 'takeaway':
+        takeawayRestaurants.value = []
+        break
+      case 'shopping':
+        shoppingProducts.value = []
         break
     }
     saveData(type)
@@ -896,6 +984,16 @@ export const useSocialAIStore = defineStore('socialAI', () => {
     theaterDramas,
     theaterLoading,
     generateTheaterContent,
+
+    // 外卖
+    takeawayRestaurants,
+    takeawayLoading,
+    generateTakeawayContent,
+
+    // 购物
+    shoppingProducts,
+    shoppingLoading,
+    generateShoppingContent,
 
     // 通用
     generating,

@@ -6,7 +6,7 @@
     <div class="balance-bar">
       <div class="balance-info">
         <span class="balance-label">金币余额</span>
-        <span class="balance-value">🪙 {{ walletStore.balance.toLocaleString() }}</span>
+        <span class="balance-value"><span class="coin-icon">$</span> {{ walletStore.balance.toLocaleString() }}</span>
       </div>
       <button class="recharge-btn" @click="recharge">+ 充值</button>
     </div>
@@ -20,7 +20,9 @@
         :class="{ active: activeGame === tab.id }"
         @click="activeGame = tab.id"
       >
-        <span class="tab-emoji">{{ tab.icon }}</span>
+        <div class="tab-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" v-html="tab.svg"></svg>
+        </div>
         <span class="tab-name">{{ tab.name }}</span>
       </div>
     </div>
@@ -34,7 +36,7 @@
         </div>
         <div class="slots-reels">
           <div v-for="(reel, i) in slotReels" :key="i" class="reel" :class="{ spinning: slotSpinning }">
-            <div class="reel-symbol">{{ reel }}</div>
+            <div class="reel-symbol" :style="{ color: getSlotColor(reel) }">{{ reel }}</div>
           </div>
         </div>
         <div v-if="slotResult" class="slot-result" :class="slotResult.type">
@@ -58,7 +60,7 @@
           :disabled="slotSpinning || walletStore.balance < slotBet"
           @click="spinSlots"
         >
-          {{ slotSpinning ? '旋转中...' : '▣ SPIN' }}
+          {{ slotSpinning ? '旋转中...' : 'SPIN' }}
         </button>
       </div>
     </div>
@@ -68,7 +70,42 @@
       <div class="dice-game">
         <div class="dice-display">
           <div v-for="(d, i) in diceValues" :key="i" class="dice" :class="{ rolling: diceRolling }">
-            {{ diceEmojis[d - 1] }}
+            <svg class="dice-svg" viewBox="0 0 60 60">
+              <rect x="2" y="2" width="56" height="56" rx="10" fill="#fff" stroke="#ddd" stroke-width="1"/>
+              <template v-if="d === 1">
+                <circle cx="30" cy="30" r="5" fill="#333"/>
+              </template>
+              <template v-else-if="d === 2">
+                <circle cx="18" cy="18" r="5" fill="#333"/>
+                <circle cx="42" cy="42" r="5" fill="#333"/>
+              </template>
+              <template v-else-if="d === 3">
+                <circle cx="18" cy="18" r="5" fill="#333"/>
+                <circle cx="30" cy="30" r="5" fill="#333"/>
+                <circle cx="42" cy="42" r="5" fill="#333"/>
+              </template>
+              <template v-else-if="d === 4">
+                <circle cx="18" cy="18" r="5" fill="#333"/>
+                <circle cx="42" cy="18" r="5" fill="#333"/>
+                <circle cx="18" cy="42" r="5" fill="#333"/>
+                <circle cx="42" cy="42" r="5" fill="#333"/>
+              </template>
+              <template v-else-if="d === 5">
+                <circle cx="18" cy="18" r="5" fill="#333"/>
+                <circle cx="42" cy="18" r="5" fill="#333"/>
+                <circle cx="30" cy="30" r="5" fill="#333"/>
+                <circle cx="18" cy="42" r="5" fill="#333"/>
+                <circle cx="42" cy="42" r="5" fill="#333"/>
+              </template>
+              <template v-else>
+                <circle cx="18" cy="15" r="5" fill="#e74c3c"/>
+                <circle cx="42" cy="15" r="5" fill="#e74c3c"/>
+                <circle cx="18" cy="30" r="5" fill="#e74c3c"/>
+                <circle cx="42" cy="30" r="5" fill="#e74c3c"/>
+                <circle cx="18" cy="45" r="5" fill="#e74c3c"/>
+                <circle cx="42" cy="45" r="5" fill="#e74c3c"/>
+              </template>
+            </svg>
           </div>
         </div>
         <div v-if="diceTotal > 0 && !diceRolling" class="dice-total">
@@ -113,7 +150,7 @@
           :disabled="diceRolling || !diceChoice || walletStore.balance < diceBet"
           @click="rollDice"
         >
-          {{ diceRolling ? '摇骰中...' : '⚄ 摇骰子' }}
+          {{ diceRolling ? '摇骰中...' : '摇骰子' }}
         </button>
       </div>
     </div>
@@ -151,7 +188,7 @@
           :disabled="wheelSpinning || walletStore.balance < 50"
           @click="spinWheel"
         >
-          {{ wheelSpinning ? '转动中...' : '◎ 转动转盘' }}
+          {{ wheelSpinning ? '转动中...' : '转动转盘' }}
         </button>
       </div>
     </div>
@@ -159,7 +196,7 @@
     <!-- 历史记录 -->
     <div class="history-section">
       <div class="history-header">
-        <span>▤ 游戏记录</span>
+        <span>游戏记录</span>
         <span class="clear-btn" @click="history = []">清空</span>
       </div>
       <div v-if="history.length === 0" class="history-empty">暂无记录</div>
@@ -192,17 +229,25 @@ interface HistoryItem {
 }
 
 const gameTabs = [
-  { id: 'slots', name: '老虎机', icon: '▣' },
-  { id: 'dice', name: '骰子', icon: '⚄' },
-  { id: 'wheel', name: '转盘', icon: '◎' },
+  { id: 'slots', name: '老虎机', svg: '<rect x="3" y="3" width="18" height="18" rx="3"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/><circle cx="6" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="18" cy="12" r="1" fill="currentColor"/>' },
+  { id: 'dice', name: '骰子', svg: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="16" cy="16" r="1.5" fill="currentColor"/>' },
+  { id: 'wheel', name: '转盘', svg: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/>' },
 ]
 
 const activeGame = ref('slots')
 const history = ref<HistoryItem[]>([])
 
 // ===== 老虎机 =====
-const slotSymbols = ['●', '◆', '◆', '●', '◇', '7', '▲', '★']
-const slotReels = ref(['●', '●', '●'])
+const slotSymbols = ['7', 'A', 'K', 'Q', 'J', 'W', 'X', 'BAR']
+const slotReels = ref(['7', '7', '7'])
+
+function getSlotColor(symbol: string): string {
+  const map: Record<string, string> = {
+    '7': '#e74c3c', 'A': '#ffd700', 'K': '#a29bfe', 'Q': '#00b894',
+    'J': '#0984e3', 'W': '#fd79a8', 'X': '#fdcb6e', 'BAR': '#dfe6e9',
+  }
+  return map[symbol] || '#fff'
+}
 const slotSpinning = ref(false)
 const slotBet = ref(50)
 const slotResult = ref<{ text: string; type: string } | null>(null)
@@ -230,28 +275,27 @@ function spinSlots() {
       slotSpinning.value = false
 
       if (final[0] === final[1] && final[1] === final[2]) {
-        const multiplier = final[0] === '7' ? 50 : final[0] === '◇' ? 20 : 10
+        const multiplier = final[0] === '7' ? 50 : final[0] === 'BAR' ? 20 : 10
         const win = slotBet.value * multiplier
         walletStore.balance += win
         walletStore.addTransaction({ type: 'income', category: 'other', description: '老虎机三连中奖', amount: win })
-        slotResult.value = { text: `★ 三连！赢得 ${win} 金币！`, type: 'win' }
-        addHistory({ game: '▣ 老虎机', detail: `${final.join('')} 三连`, amount: win, win: true })
+        slotResult.value = { text: `三连！赢得 ${win} 金币！`, type: 'win' }
+        addHistory({ game: '老虎机', detail: `${final.join(' ')} 三连`, amount: win, win: true })
       } else if (final[0] === final[1] || final[1] === final[2] || final[0] === final[2]) {
         const win = slotBet.value * 2
         walletStore.balance += win
         walletStore.addTransaction({ type: 'income', category: 'other', description: '老虎机两连中奖', amount: win })
-        slotResult.value = { text: `◠ 两连！赢得 ${win} 金币`, type: 'win' }
-        addHistory({ game: '▣ 老虎机', detail: `${final.join('')} 两连`, amount: win, win: true })
+        slotResult.value = { text: `两连！赢得 ${win} 金币`, type: 'win' }
+        addHistory({ game: '老虎机', detail: `${final.join(' ')} 两连`, amount: win, win: true })
       } else {
-        slotResult.value = { text: '◡ 没有中奖', type: 'lose' }
-        addHistory({ game: '▣ 老虎机', detail: final.join(''), amount: -slotBet.value, win: false })
+        slotResult.value = { text: '没有中奖', type: 'lose' }
+        addHistory({ game: '老虎机', detail: final.join(' '), amount: -slotBet.value, win: false })
       }
     }
   }, 80)
 }
 
 // ===== 骰子 =====
-const diceEmojis = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
 const diceValues = ref([1, 1, 1])
 const diceTotal = ref(0)
 const diceRolling = ref(false)
@@ -287,13 +331,13 @@ function rollDice() {
         const win = diceBet.value * 2
         walletStore.balance += win
         walletStore.addTransaction({ type: 'income', category: 'other', description: '骰子中奖', amount: win })
-        diceResultText.value = `★ 猜对了！赢得 ${win} 金币`
+        diceResultText.value = `猜对了！赢得 ${win} 金币`
         diceResultType.value = 'win'
-        addHistory({ game: '⚄ 骰子', detail: `${total}点 ${isBig ? '大' : '小'} 猜${diceChoice.value === 'big' ? '大' : '小'}`, amount: win, win: true })
+        addHistory({ game: '骰子', detail: `${total}点 ${isBig ? '大' : '小'} 猜${diceChoice.value === 'big' ? '大' : '小'}`, amount: win, win: true })
       } else {
-        diceResultText.value = `◡ 猜错了，${total}点是${isBig ? '大' : '小'}`
+        diceResultText.value = `猜错了，${total}点是${isBig ? '大' : '小'}`
         diceResultType.value = 'lose'
-        addHistory({ game: '⚄ 骰子', detail: `${total}点 猜错`, amount: -diceBet.value, win: false })
+        addHistory({ game: '骰子', detail: `${total}点 猜错`, amount: -diceBet.value, win: false })
       }
     }
   }, 100)
@@ -301,14 +345,14 @@ function rollDice() {
 
 // ===== 幸运转盘 =====
 const wheelSegments = [
-  { label: '10币', emoji: '🪙', color: '#ff6b6b', value: 10 },
-  { label: '50币', emoji: '¤', color: '#ffd93d', value: 50 },
-  { label: '100币', emoji: '◇', color: '#6bcb77', value: 100 },
-  { label: '再来', emoji: '↻', color: '#4d96ff', value: 0 },
-  { label: '200币', emoji: '★', color: '#ff6b6b', value: 200 },
-  { label: '20币', emoji: '★', color: '#ffd93d', value: 20 },
-  { label: '500币', emoji: '♛', color: '#6bcb77', value: 500 },
-  { label: '谢谢', emoji: '~', color: '#4d96ff', value: -1 },
+  { label: '10币', emoji: '$', color: '#ff6b6b', value: 10 },
+  { label: '50币', emoji: '$$', color: '#ffd93d', value: 50 },
+  { label: '100币', emoji: 'x2', color: '#6bcb77', value: 100 },
+  { label: '再来', emoji: 'GO', color: '#4d96ff', value: 0 },
+  { label: '200币', emoji: 'x4', color: '#ff6b6b', value: 200 },
+  { label: '20币', emoji: '+', color: '#ffd93d', value: 20 },
+  { label: '500币', emoji: 'x10', color: '#6bcb77', value: 500 },
+  { label: '谢谢', emoji: '--', color: '#4d96ff', value: -1 },
 ]
 
 const segAngle = 360 / wheelSegments.length
@@ -339,15 +383,15 @@ function spinWheel() {
     if (seg.value > 0) {
       walletStore.balance += seg.value
       walletStore.addTransaction({ type: 'income', category: 'other', description: '转盘中奖', amount: seg.value })
-      wheelResult.value = `${seg.emoji} ${seg.label}`
-      addHistory({ game: '◎ 转盘', detail: seg.label, amount: seg.value, win: true })
+      wheelResult.value = `中奖：${seg.label}`
+      addHistory({ game: '转盘', detail: seg.label, amount: seg.value, win: true })
     } else if (seg.value === 0) {
-      wheelResult.value = '↻ 免费再来一次！'
+      wheelResult.value = '免费再来一次！'
       walletStore.balance += 50
-      addHistory({ game: '◎ 转盘', detail: '免费一次', amount: 0, win: true })
+      addHistory({ game: '转盘', detail: '免费一次', amount: 0, win: true })
     } else {
-      wheelResult.value = '~ 谢谢参与'
-      addHistory({ game: '◎ 转盘', detail: '未中奖', amount: -50, win: false })
+      wheelResult.value = '谢谢参与'
+      addHistory({ game: '转盘', detail: '未中奖', amount: -50, win: false })
     }
   }, 4200)
 }
@@ -399,7 +443,21 @@ onMounted(async () => {
 }
 
 .balance-label { font-size: 12px; opacity: 0.7; }
-.balance-value { font-size: 20px; font-weight: 700; display: block; margin-top: 2px; }
+.balance-value { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+
+.coin-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ffd700, #ff8c00);
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
 
 .recharge-btn {
   padding: 6px 16px;
@@ -437,7 +495,21 @@ onMounted(async () => {
   background: var(--bg-tertiary);
 }
 
-.tab-emoji { font-size: 24px; }
+.tab-icon-wrap {
+  width: 28px;
+  height: 28px;
+}
+
+.tab-icon-wrap svg {
+  width: 100%;
+  height: 100%;
+  color: var(--text-secondary);
+}
+
+.game-tab.active .tab-icon-wrap svg {
+  color: var(--color-primary);
+}
+
 .tab-name { font-size: 12px; color: var(--text-secondary); font-weight: 500; }
 
 .game-area {
@@ -496,7 +568,13 @@ onMounted(async () => {
   50% { transform: translateY(2px); }
 }
 
-.reel-symbol { font-size: 42px; }
+.reel-symbol {
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: -1px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.15);
+  font-family: 'Inter', sans-serif;
+}
 
 .slot-result {
   font-size: 16px;
@@ -572,14 +650,18 @@ onMounted(async () => {
 }
 
 .dice {
-  font-size: 48px;
   width: 70px;
   height: 70px;
-  background: #fff;
   border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+}
+
+.dice-svg {
+  width: 100%;
+  height: 100%;
 }
 
 .dice.rolling {

@@ -123,7 +123,6 @@ function updateDateTime() {
 
 const allApps: AppItem[] = [
   { name: '聊天', iconKey: 'chat', color: 'linear-gradient(135deg, #5B6EF5, #8B5CF6)', route: '/friends', featureId: 'chat' },
-  { name: '论坛', iconKey: 'forum', color: 'linear-gradient(135deg, #FF6B35, #F7931E)', route: '/forum', featureId: 'forum' },
   { name: '微博', iconKey: 'weibo', color: 'linear-gradient(135deg, #E6162D, #FF4757)', route: '/weibo', featureId: 'weibo' },
   { name: '朋友圈', iconKey: 'qzone', color: 'linear-gradient(135deg, #2ED573, #7BED9F)', route: '/qzone', featureId: 'qzone' },
   { name: '外卖', iconKey: 'takeaway', color: 'linear-gradient(135deg, #0AB4FF, #26D0CE)', route: '/takeaway', featureId: 'takeaway' },

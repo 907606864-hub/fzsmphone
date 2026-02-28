@@ -1322,3 +1322,109 @@ export function parseTheaterContent(raw: string): TheaterData {
   console.log(`[SocialParser] Theater: ${dramas.length} dramas`)
   return { dramas }
 }
+
+// ==================== 外卖数据类型 ====================
+
+export interface TakeawayRestaurant {
+  id: string
+  name: string
+  category: string
+  rating: number
+  delivery_time: string
+  min_order: number
+  image_url: string
+}
+
+export interface TakeawayData {
+  restaurants: TakeawayRestaurant[]
+}
+
+// ==================== 购物数据类型 ====================
+
+export interface ShoppingProduct {
+  id: string
+  name: string
+  category: string
+  price: number
+  originalPrice: number
+  description: string
+  iconKey: string
+  sales: number
+  fav: boolean
+}
+
+export interface ShoppingData {
+  products: ShoppingProduct[]
+}
+
+// ==================== 外卖解析器 ====================
+
+const CATEGORY_ICON_KEYS = ['star', 'fire', 'food', 'bowl', 'pot', 'cake', 'cup']
+
+export function parseTakeawayContent(raw: string): TakeawayData {
+  const restaurants: TakeawayRestaurant[] = []
+
+  const startMarker = '<!-- TAKEAWAY_CONTENT_START -->'
+  const endMarker = '<!-- TAKEAWAY_CONTENT_END -->'
+  const startIdx = raw.indexOf(startMarker)
+  const endIdx = raw.indexOf(endMarker)
+  const content = startIdx >= 0 && endIdx >= 0
+    ? raw.slice(startIdx + startMarker.length, endIdx)
+    : raw
+
+  let m: RegExpExecArray | null
+
+  // [餐厅|名称|分类|评分|配送时间|起送价]
+  const restRe = /\[餐厅\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+  while ((m = restRe.exec(content)) !== null) {
+    restaurants.push({
+      id: generateId('r'),
+      name: m[1].trim(),
+      category: m[2].trim(),
+      rating: parseFloat(m[3].trim()) || 4.5,
+      delivery_time: m[4].trim(),
+      min_order: parseFloat(m[5].trim()) || 0,
+      image_url: '',
+    })
+  }
+
+  console.log(`[SocialParser] Takeaway: ${restaurants.length} restaurants`)
+  return { restaurants }
+}
+
+// ==================== 购物解析器 ====================
+
+export function parseShoppingContent(raw: string): ShoppingData {
+  const products: ShoppingProduct[] = []
+
+  const startMarker = '<!-- SHOPPING_CONTENT_START -->'
+  const endMarker = '<!-- SHOPPING_CONTENT_END -->'
+  const startIdx = raw.indexOf(startMarker)
+  const endIdx = raw.indexOf(endMarker)
+  const content = startIdx >= 0 && endIdx >= 0
+    ? raw.slice(startIdx + startMarker.length, endIdx)
+    : raw
+
+  let m: RegExpExecArray | null
+
+  const iconKeys = ['shirt', 'shoe', 'bag', 'phone', 'headphone', 'book', 'watch', 'cosmetic', 'food', 'gift']
+
+  // [商品|名称|分类|价格|原价|描述]
+  const prodRe = /\[商品\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+  while ((m = prodRe.exec(content)) !== null) {
+    products.push({
+      id: generateId('p'),
+      name: m[1].trim(),
+      category: m[2].trim(),
+      price: parseFloat(m[3].trim()) || 99,
+      originalPrice: parseFloat(m[4].trim()) || 129,
+      description: m[5].trim(),
+      iconKey: iconKeys[products.length % iconKeys.length],
+      sales: Math.floor(Math.random() * 5000) + 100,
+      fav: false,
+    })
+  }
+
+  console.log(`[SocialParser] Shopping: ${products.length} products`)
+  return { products }
+}

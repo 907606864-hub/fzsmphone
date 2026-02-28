@@ -2,10 +2,10 @@
   <div class="takeaway-page">
     <NavBar title="外卖" back-to="/">
       <template #right>
-        <button class="icon-btn" @click="$router.push('/takeaway/orders')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
-            <rect x="9" y="3" width="6" height="4" rx="2" />
+        <button class="icon-btn" :disabled="aiStore.takeawayLoading" @click="refreshData">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" :class="{ spinning: aiStore.takeawayLoading }">
+            <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
           </svg>
         </button>
       </template>
@@ -30,27 +30,44 @@
         :class="{ active: currentCat === cat.id }"
         @click="currentCat = cat.id"
       >
-        <span class="cat-emoji">{{ cat.emoji }}</span>
+        <span class="cat-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" v-html="cat.svg"></svg>
+        </span>
         <span class="cat-label">{{ cat.label }}</span>
       </button>
     </div>
 
+    <!-- Loading -->
+    <div v-if="aiStore.takeawayLoading" class="loading-state">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">AI 正在生成餐厅...</div>
+    </div>
+
+    <!-- Error -->
+    <div v-if="aiStore.lastError && !aiStore.takeawayLoading" class="error-state">
+      <div class="error-text">{{ aiStore.lastError }}</div>
+      <button class="retry-btn" @click="refreshData">重试</button>
+    </div>
+
     <!-- Restaurant List -->
     <div class="restaurant-list">
-      <div v-if="filteredRestaurants.length === 0" class="empty-state">
-        <div class="empty-emoji">◈</div>
+      <div v-if="filteredRestaurants.length === 0 && !aiStore.takeawayLoading" class="empty-state">
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M3 3h18v18H3zM12 8v4M12 16h.01"/>
+        </svg>
         <div class="empty-title">暂无餐厅</div>
+        <button class="generate-btn" @click="refreshData">生成餐厅</button>
       </div>
 
       <div
         v-for="r in filteredRestaurants"
         :key="r.id"
         class="restaurant-card"
-        @click="$router.push(`/takeaway/restaurant/${r.id}`)"
       >
         <div class="rest-img">
-          <img v-if="r.image_url" :src="r.image_url" :alt="r.name" />
-          <span v-else class="rest-img-placeholder">◈</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8h1a4 4 0 0 1 0 8h-1" /><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" /><line x1="6" y1="1" x2="6" y2="4" /><line x1="10" y1="1" x2="10" y2="4" /><line x1="14" y1="1" x2="14" y2="4" />
+          </svg>
         </div>
         <div class="rest-info">
           <div class="rest-name">{{ r.name }}</div>
@@ -72,34 +89,25 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import NavBar from '@/components/common/NavBar.vue'
-import { api } from '@/api/client'
+import { useSocialAIStore } from '@/stores/socialAI'
 
-interface Restaurant {
-  id: number
-  name: string
-  category: string
-  image_url: string
-  rating: number
-  delivery_time: string
-  min_order: number
-}
+const aiStore = useSocialAIStore()
 
 const categories = [
-  { id: 'all', emoji: '▲', label: '全部' },
-  { id: '快餐', emoji: '◆', label: '快餐' },
-  { id: '中餐', emoji: '◈', label: '中餐' },
-  { id: '火锅', emoji: '◎', label: '火锅' },
-  { id: '烧烤', emoji: '◎', label: '烧烤' },
-  { id: '甜品', emoji: '●', label: '甜品' },
-  { id: '饮品', emoji: '◇', label: '饮品' },
+  { id: 'all', label: '全部', svg: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>' },
+  { id: '快餐', label: '快餐', svg: '<path d="M17 11H3M21 15H7M17 19H3M21 7H3"/>' },
+  { id: '中餐', label: '中餐', svg: '<path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>' },
+  { id: '火锅', label: '火锅', svg: '<path d="M12 2c0 3-4 4-4 8s4 5 4 5 4-1 4-5-4-5-4-8z"/><ellipse cx="12" cy="19" rx="7" ry="3"/>' },
+  { id: '烧烤', label: '烧烤', svg: '<line x1="4" y1="22" x2="4" y2="10"/><circle cx="4" cy="7" r="3"/><line x1="12" y1="22" x2="12" y2="10"/><circle cx="12" cy="7" r="3"/><line x1="20" y1="22" x2="20" y2="10"/><circle cx="20" cy="7" r="3"/>' },
+  { id: '甜品', label: '甜品', svg: '<path d="M12 2a4 4 0 0 1 4 4c0 1-1 2-2 3h-4c-1-1-2-2-2-3a4 4 0 0 1 4-4zM6 9h12l-1 11a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 9z"/>' },
+  { id: '饮品', label: '饮品', svg: '<path d="M17 8l-5 14-5-14"/><path d="M6 8h12"/><path d="M9 8a3 3 0 1 0 0-6"/>' },
 ]
 
 const search = ref('')
 const currentCat = ref('all')
-const restaurants = ref<Restaurant[]>([])
 
 const filteredRestaurants = computed(() => {
-  let list = restaurants.value
+  let list = aiStore.takeawayRestaurants
   if (currentCat.value !== 'all') {
     list = list.filter(r => r.category === currentCat.value)
   }
@@ -110,14 +118,16 @@ const filteredRestaurants = computed(() => {
   return list
 })
 
-async function fetchRestaurants() {
-  try {
-    const res = await api.get<{ data: Restaurant[] }>('/api/restaurants')
-    restaurants.value = res.data || []
-  } catch { /* empty */ }
+function refreshData() {
+  aiStore.generateTakeawayContent()
 }
 
-onMounted(fetchRestaurants)
+onMounted(() => {
+  aiStore.loadData('takeaway')
+  if (aiStore.takeawayRestaurants.length === 0) {
+    aiStore.generateTakeawayContent()
+  }
+})
 </script>
 
 <style scoped>
@@ -178,9 +188,67 @@ onMounted(fetchRestaurants)
 }
 
 .cat-btn.active { background: rgba(88, 86, 214, 0.1); }
-.cat-emoji { font-size: 24px; }
+
+.cat-icon-wrap {
+  width: 28px;
+  height: 28px;
+}
+
+.cat-icon-wrap svg {
+  width: 100%;
+  height: 100%;
+  color: var(--text-secondary);
+}
+
+.cat-btn.active .cat-icon-wrap svg {
+  color: var(--brand-primary);
+}
+
 .cat-label { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
 .cat-btn.active .cat-label { color: var(--brand-primary); font-weight: 600; }
+
+/* Loading */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px;
+  gap: 12px;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--fill-tertiary);
+  border-top-color: var(--brand-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text { font-size: 14px; color: var(--text-tertiary); }
+
+/* Error */
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  gap: 8px;
+}
+.error-text { font-size: 13px; color: var(--ios-red); text-align: center; }
+.retry-btn {
+  padding: 6px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--brand-primary);
+  background: none;
+  color: var(--brand-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
 
 /* Restaurant List */
 .restaurant-list {
@@ -210,14 +278,13 @@ onMounted(fetchRestaurants)
   border-radius: 10px;
   overflow: hidden;
   flex-shrink: 0;
-  background: var(--fill-tertiary);
+  background: linear-gradient(135deg, #ffd93d33, #ff6b6b33);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.rest-img img { width: 100%; height: 100%; object-fit: cover; }
-.rest-img-placeholder { font-size: 32px; }
+.rest-img svg { width: 36px; height: 36px; color: var(--text-tertiary); }
 
 .rest-info {
   flex: 1;
@@ -265,9 +332,19 @@ onMounted(fetchRestaurants)
   color: var(--text-tertiary);
 }
 
-.empty-state { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; }
-.empty-emoji { font-size: 48px; margin-bottom: 12px; }
+.empty-state { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; gap: 12px; }
+.empty-icon { width: 48px; height: 48px; color: var(--text-quaternary); }
 .empty-title { font-size: 17px; font-weight: 600; color: var(--text-secondary); }
+
+.generate-btn {
+  padding: 8px 20px;
+  border-radius: 10px;
+  border: none;
+  background: var(--brand-primary);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
 
 .icon-btn {
   width: 32px; height: 32px; border: none; background: none;
@@ -276,4 +353,5 @@ onMounted(fetchRestaurants)
 }
 .icon-btn:active { opacity: 0.5; }
 .icon-btn svg { width: 22px; height: 22px; }
+.icon-btn svg.spinning { animation: spin 1s linear infinite; }
 </style>

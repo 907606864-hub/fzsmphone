@@ -199,6 +199,173 @@
           </div>
         </div>
       </Transition>
+
+      <!-- 银行卡弹窗 -->
+      <Transition name="fade">
+        <div v-if="showBankCards" class="modal-overlay" @click.self="showBankCards = false">
+          <div class="panel-modal">
+            <div class="modal-header">
+              <span>银行卡</span>
+              <button class="close-btn" @click="showBankCards = false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div class="panel-body">
+              <div v-for="card in bankCards" :key="card.id" class="bank-card" :style="{ background: card.gradient }">
+                <div class="card-top">
+                  <span class="card-bank">{{ card.bank }}</span>
+                  <span class="card-type">{{ card.type }}</span>
+                </div>
+                <div class="card-number">**** **** **** {{ card.last4 }}</div>
+                <div class="card-bottom">
+                  <span class="card-holder">持卡人</span>
+                  <span class="card-balance">余额 ¥{{ formatMoney(card.balance) }}</span>
+                </div>
+              </div>
+              <button class="add-card-btn" @click="addBankCard">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px">
+                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                <span>添加银行卡</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+
+      <!-- 理财产品弹窗 -->
+      <Transition name="fade">
+        <div v-if="showInvest" class="modal-overlay" @click.self="showInvest = false">
+          <div class="panel-modal">
+            <div class="modal-header">
+              <span>理财产品</span>
+              <button class="close-btn" @click="showInvest = false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div class="panel-body">
+              <div v-for="fund in investFunds" :key="fund.id" class="invest-card">
+                <div class="invest-header">
+                  <span class="invest-name">{{ fund.name }}</span>
+                  <span class="invest-badge" :class="fund.risk">{{ fund.riskLabel }}</span>
+                </div>
+                <div class="invest-metrics">
+                  <div class="metric">
+                    <span class="metric-value" :class="fund.todayReturn >= 0 ? 'up' : 'down'">
+                      {{ fund.todayReturn >= 0 ? '+' : '' }}{{ fund.todayReturn.toFixed(2) }}%
+                    </span>
+                    <span class="metric-label">今日收益率</span>
+                  </div>
+                  <div class="metric">
+                    <span class="metric-value">¥{{ formatMoney(fund.amount) }}</span>
+                    <span class="metric-label">持有金额</span>
+                  </div>
+                  <div class="metric">
+                    <span class="metric-value up">+¥{{ fund.totalReturn.toFixed(2) }}</span>
+                    <span class="metric-label">累计收益</span>
+                  </div>
+                </div>
+                <div class="invest-chart">
+                  <svg viewBox="0 0 200 40" class="mini-chart">
+                    <polyline :points="fund.chartPoints" fill="none" stroke="#00b894" stroke-width="1.5" />
+                    <polyline :points="fund.chartPoints" fill="url(#chartGrad)" stroke="none" opacity="0.15" />
+                    <defs>
+                      <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#00b894" />
+                        <stop offset="100%" stop-color="transparent" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+
+      <!-- 优惠券弹窗 -->
+      <Transition name="fade">
+        <div v-if="showCoupons" class="modal-overlay" @click.self="showCoupons = false">
+          <div class="panel-modal">
+            <div class="modal-header">
+              <span>优惠券</span>
+              <button class="close-btn" @click="showCoupons = false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div class="panel-body">
+              <div v-for="coupon in coupons" :key="coupon.id" class="coupon-card" :class="{ used: coupon.used }">
+                <div class="coupon-left" :style="{ background: coupon.used ? '#636e72' : coupon.color }">
+                  <span class="coupon-amount">¥{{ coupon.discount }}</span>
+                  <span class="coupon-condition">满{{ coupon.minSpend }}可用</span>
+                </div>
+                <div class="coupon-right">
+                  <span class="coupon-name">{{ coupon.name }}</span>
+                  <span class="coupon-expire">有效期至 {{ coupon.expire }}</span>
+                  <button v-if="!coupon.used" class="coupon-use-btn" @click="useCoupon(coupon)">立即使用</button>
+                  <span v-else class="coupon-used-tag">已使用</span>
+                </div>
+                <div class="coupon-circle coupon-circle-top"></div>
+                <div class="coupon-circle coupon-circle-bottom"></div>
+              </div>
+              <div v-if="coupons.length === 0" class="empty-tx" style="padding:40px">
+                暂无优惠券
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+
+      <!-- 支付设置弹窗 -->
+      <Transition name="fade">
+        <div v-if="showPaySettings" class="modal-overlay" @click.self="showPaySettings = false">
+          <div class="panel-modal">
+            <div class="modal-header">
+              <span>支付设置</span>
+              <button class="close-btn" @click="showPaySettings = false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div class="panel-body">
+              <div class="settings-group">
+                <div class="setting-item" v-for="s in paySettings" :key="s.label">
+                  <div class="setting-left">
+                    <div class="setting-icon" :style="{ background: s.iconBg }">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" v-html="s.iconPath"></svg>
+                    </div>
+                    <div class="setting-info">
+                      <span class="setting-label">{{ s.label }}</span>
+                      <span class="setting-desc">{{ s.desc }}</span>
+                    </div>
+                  </div>
+                  <div class="setting-toggle" :class="{ on: s.enabled }" @click="s.enabled = !s.enabled">
+                    <div class="toggle-knob"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="settings-group" style="margin-top:12px">
+                <div class="setting-item" @click="handlePayPassword">
+                  <div class="setting-left">
+                    <div class="setting-icon" style="background:linear-gradient(135deg,#e17055,#d63031)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                      </svg>
+                    </div>
+                    <div class="setting-info">
+                      <span class="setting-label">修改支付密码</span>
+                      <span class="setting-desc">保障您的资金安全</span>
+                    </div>
+                  </div>
+                  <svg class="menu-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
     </Teleport>
   </div>
 </template>
@@ -215,8 +382,127 @@ const walletStore = useWalletStore()
 const showBalance = ref(true)
 const showHistory = ref(false)
 const showTopUp = ref(false)
+const showBankCards = ref(false)
+const showInvest = ref(false)
+const showCoupons = ref(false)
+const showPaySettings = ref(false)
 const topUpAmount = ref<number | string>('')
 const topUpInputRef = ref<HTMLInputElement | null>(null)
+
+// ===== 银行卡数据 =====
+interface BankCard {
+  id: number
+  bank: string
+  type: string
+  last4: string
+  balance: number
+  gradient: string
+}
+
+const bankCards = ref<BankCard[]>([
+  { id: 1, bank: '中国工商银行', type: '储蓄卡', last4: '8842', balance: 52360.00, gradient: 'linear-gradient(135deg, #e74c3c, #c0392b)' },
+  { id: 2, bank: '招商银行', type: '信用卡', last4: '3317', balance: 15000.00, gradient: 'linear-gradient(135deg, #2980b9, #3498db)' },
+])
+
+function addBankCard() {
+  const banks = ['中国银行', '建设银行', '交通银行', '农业银行', '浦发银行']
+  const types = ['储蓄卡', '信用卡']
+  const gradients = [
+    'linear-gradient(135deg, #00b894, #00cec9)',
+    'linear-gradient(135deg, #6c5ce7, #a29bfe)',
+    'linear-gradient(135deg, #fdcb6e, #e17055)',
+    'linear-gradient(135deg, #e84393, #fd79a8)',
+    'linear-gradient(135deg, #636e72, #2d3436)',
+  ]
+  bankCards.value.push({
+    id: Date.now(),
+    bank: banks[Math.floor(Math.random() * banks.length)],
+    type: types[Math.floor(Math.random() * types.length)],
+    last4: String(Math.floor(1000 + Math.random() * 9000)),
+    balance: Math.floor(Math.random() * 100000) / 100,
+    gradient: gradients[Math.floor(Math.random() * gradients.length)],
+  })
+}
+
+// ===== 理财产品数据 =====
+interface InvestFund {
+  id: number
+  name: string
+  risk: string
+  riskLabel: string
+  todayReturn: number
+  amount: number
+  totalReturn: number
+  chartPoints: string
+}
+
+function generateChart(): string {
+  const points: string[] = []
+  let y = 20
+  for (let x = 0; x <= 200; x += 10) {
+    y = Math.max(5, Math.min(35, y + (Math.random() - 0.45) * 6))
+    points.push(`${x},${y}`)
+  }
+  // Close the area
+  points.push('200,40')
+  points.push('0,40')
+  return points.join(' ')
+}
+
+const investFunds = ref<InvestFund[]>([
+  { id: 1, name: '稳健理财·月月盈', risk: 'low', riskLabel: '低风险', todayReturn: 0.012, amount: 5000, totalReturn: 128.50, chartPoints: generateChart() },
+  { id: 2, name: '进取型·科技成长', risk: 'high', riskLabel: '高风险', todayReturn: -0.35, amount: 3000, totalReturn: 256.80, chartPoints: generateChart() },
+])
+
+// ===== 优惠券数据 =====
+interface Coupon {
+  id: number
+  name: string
+  discount: number
+  minSpend: number
+  expire: string
+  color: string
+  used: boolean
+}
+
+const coupons = ref<Coupon[]>([
+  { id: 1, name: '新用户专享', discount: 10, minSpend: 50, expire: '2026-03-31', color: 'linear-gradient(135deg, #e74c3c, #c0392b)', used: false },
+  { id: 2, name: '周末购物券', discount: 5, minSpend: 30, expire: '2026-03-15', color: 'linear-gradient(135deg, #e17055, #fdcb6e)', used: false },
+  { id: 3, name: '外卖满减券', discount: 8, minSpend: 40, expire: '2026-02-28', color: 'linear-gradient(135deg, #00b894, #55efc4)', used: true },
+])
+
+function useCoupon(coupon: Coupon) {
+  coupon.used = true
+}
+
+// ===== 支付设置数据 =====
+const paySettings = ref([
+  {
+    label: '免密支付',
+    desc: '小额交易无需输入密码',
+    iconBg: 'linear-gradient(135deg, #00b894, #55efc4)',
+    iconPath: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    enabled: true,
+  },
+  {
+    label: '指纹支付',
+    desc: '使用指纹验证支付',
+    iconBg: 'linear-gradient(135deg, #6c5ce7, #a29bfe)',
+    iconPath: '<path d="M12 11c0-1.1.9-2 2-2s2 .9 2 2v3"/><path d="M8 11V9a4 4 0 0 1 8 0"/><path d="M6 11V8a6 6 0 0 1 12 0v3"/><path d="M14 14a2 2 0 0 1-2 2"/><path d="M12 18a4 4 0 0 1-4-4v-3"/>',
+    enabled: false,
+  },
+  {
+    label: '到账通知',
+    desc: '收到转账时推送通知',
+    iconBg: 'linear-gradient(135deg, #fdcb6e, #f39c12)',
+    iconPath: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+    enabled: true,
+  },
+])
+
+function handlePayPassword() {
+  alert('支付密码修改功能（虚拟）')
+}
 
 interface FinanceItem {
   iconPath: string
@@ -270,10 +556,17 @@ function formatMoney(n: number): string {
 
 function handleAction(action: string) {
   if (action === 'transfer' || action === 'redpacket') {
-    // 跳转到聊天列表，在聊天里使用
     router.push('/friends')
   } else if (action === 'casino') {
     router.push('/casino')
+  } else if (action === 'bankcard') {
+    showBankCards.value = true
+  } else if (action === 'invest') {
+    showInvest.value = true
+  } else if (action === 'coupon') {
+    showCoupons.value = true
+  } else if (action === 'settings') {
+    showPaySettings.value = true
   } else {
     console.log('Action:', action)
   }
@@ -751,5 +1044,355 @@ function confirmTopUp() {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* 通用面板弹窗 */
+.panel-modal {
+  background: var(--bg-primary);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  width: 100%;
+  max-height: 80%;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.panel-body::-webkit-scrollbar {
+  display: none;
+}
+
+/* 银行卡 */
+.bank-card {
+  border-radius: 16px;
+  padding: 20px;
+  color: #fff;
+  margin-bottom: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+.bank-card::after {
+  content: '';
+  position: absolute;
+  top: -30px;
+  right: -30px;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.card-bank {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.card-type {
+  font-size: 12px;
+  opacity: 0.7;
+  background: rgba(255,255,255,0.15);
+  padding: 2px 10px;
+  border-radius: 10px;
+}
+
+.card-number {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  margin-bottom: 16px;
+  font-family: 'Courier New', monospace;
+}
+
+.card-bottom {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.add-card-btn {
+  width: 100%;
+  padding: 16px;
+  border: 2px dashed var(--separator);
+  border-radius: 16px;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.add-card-btn:active {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+/* 理财产品 */
+.invest-card {
+  background: var(--bg-secondary);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.invest-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.invest-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.invest-badge {
+  font-size: 11px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.invest-badge.low {
+  background: rgba(0, 184, 148, 0.12);
+  color: #00b894;
+}
+
+.invest-badge.high {
+  background: rgba(214, 48, 49, 0.12);
+  color: #d63031;
+}
+
+.invest-metrics {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.metric-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.metric-value.up { color: #00b894; }
+.metric-value.down { color: #d63031; }
+
+.metric-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.mini-chart {
+  width: 100%;
+  height: 40px;
+}
+
+/* 优惠券 */
+.coupon-card {
+  display: flex;
+  background: var(--bg-secondary);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 12px;
+  position: relative;
+  transition: opacity 0.3s;
+}
+
+.coupon-card.used {
+  opacity: 0.5;
+}
+
+.coupon-left {
+  width: 100px;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.coupon-amount {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.coupon-condition {
+  font-size: 10px;
+  opacity: 0.8;
+  margin-top: 4px;
+  white-space: nowrap;
+}
+
+.coupon-right {
+  flex: 1;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.coupon-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.coupon-expire {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.coupon-use-btn {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 5px 14px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.coupon-use-btn:active {
+  transform: scale(0.95);
+}
+
+.coupon-used-tag {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 6px;
+}
+
+.coupon-circle {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg-primary);
+  left: 92px;
+}
+
+.coupon-circle-top { top: -8px; }
+.coupon-circle-bottom { bottom: -8px; }
+
+/* 支付设置 */
+.settings-group {
+  background: var(--bg-secondary);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.setting-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.setting-item:not(:last-child) {
+  border-bottom: 0.5px solid var(--separator);
+}
+
+.setting-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.setting-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.setting-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.setting-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.setting-label {
+  font-size: 15px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.setting-desc {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.setting-toggle {
+  width: 48px;
+  height: 28px;
+  border-radius: 14px;
+  background: var(--bg-tertiary);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.3s;
+  flex-shrink: 0;
+}
+
+.setting-toggle.on {
+  background: linear-gradient(135deg, #00b894, #55efc4);
+}
+
+.toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  transition: transform 0.3s;
+}
+
+.setting-toggle.on .toggle-knob {
+  transform: translateX(20px);
 }
 </style>

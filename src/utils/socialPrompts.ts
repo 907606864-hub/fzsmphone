@@ -15,6 +15,8 @@ const PROMPT_KEYS = {
   music: 'social-prompt-music',
   live: 'social-prompt-live',
   theater: 'social-prompt-theater',
+  takeaway: 'social-prompt-takeaway',
+  shopping: 'social-prompt-shopping',
 } as const
 
 // ==================== 默认提示词 ====================
@@ -250,9 +252,56 @@ Requirements:
 6. Description should be engaging and match characters world
 7. DO NOT output anything outside the format`
 
+export const DEFAULT_TAKEAWAY_PROMPT = `你现在需要模拟一个外卖平台的餐厅列表。请根据角色设定和世界观，生成符合当前世界观的餐厅数据。
+
+**角色列表：**
+{{characters}}
+
+**用户身份：** {{user}}
+
+{{action}}
+
+请严格按照以下格式输出外卖内容：
+
+<!-- TAKEAWAY_CONTENT_START -->
+[餐厅|餐厅名称|分类|评分|配送时间|起送价]
+<!-- TAKEAWAY_CONTENT_END -->
+
+要求：
+1. 生成10-15个餐厅
+2. 分类包括：快餐、中餐、火锅、烧烤、甜品、饮品等
+3. 评分用数字（如4.5、4.8）
+4. 配送时间用文字表示（如"25-35分钟"）
+5. 起送价用数字（妆20、0表示无起送）
+6. 餐厅名称要生动有特色，符合角色世界观
+7. 不要输出格式之外的任何内容`
+
+export const DEFAULT_SHOPPING_PROMPT = `你现在需要模拟一个购物平台的商品列表。请根据角色设定和世界观，生成符合当前世界观的商品数据。
+
+**角色列表：**
+{{characters}}
+
+**用户身份：** {{user}}
+
+{{action}}
+
+请严格按照以下格式输出购物内容：
+
+<!-- SHOPPING_CONTENT_START -->
+[商品|商品名称|分类|价格|原价|商品描述]
+<!-- SHOPPING_CONTENT_END -->
+
+要求：
+1. 生成12-20个商品
+2. 分类包括：服饰、数码、美妆、食品、生活、书籍等
+3. 价格和原价用数字（妆99.9、129.0）
+4. 商品描述要简短吸引人
+5. 商品名称要生动有特色，符合角色世界观
+6. 不要输出格式之外的任何内容`
+
 // ==================== Prompt management functions ====================
 
-export type SocialType = 'forum' | 'weibo' | 'moments' | 'zhihu' | 'xiaohongshu' | 'douyin' | 'music' | 'live' | 'theater'
+export type SocialType = 'forum' | 'weibo' | 'moments' | 'zhihu' | 'xiaohongshu' | 'douyin' | 'music' | 'live' | 'theater' | 'takeaway' | 'shopping'
 
 /** 获取提示词模板 */
 export function getPromptTemplate(type: SocialType): string {
@@ -271,6 +320,8 @@ export function getPromptTemplate(type: SocialType): string {
     case 'music': return DEFAULT_MUSIC_PROMPT
     case 'live': return DEFAULT_LIVE_PROMPT
     case 'theater': return DEFAULT_THEATER_PROMPT
+    case 'takeaway': return DEFAULT_TAKEAWAY_PROMPT
+    case 'shopping': return DEFAULT_SHOPPING_PROMPT
   }
 }
 

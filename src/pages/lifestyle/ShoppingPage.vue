@@ -1,6 +1,15 @@
 <template>
   <div class="shopping-page">
-    <NavBar title="购物" back />
+    <NavBar title="购物" back>
+      <template #right>
+        <button class="refresh-btn" :disabled="aiStore.shoppingLoading" @click="refreshProducts">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" :class="{ spinning: aiStore.shoppingLoading }">
+            <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+          </svg>
+        </button>
+      </template>
+    </NavBar>
 
     <!-- 搜索栏 -->
     <div class="search-bar">
@@ -54,7 +63,7 @@
         <div class="product-image"><GradientIcon :name="product.iconKey" :size="48" shape="square" /></div>
         <div class="product-info">
           <div class="product-name">{{ product.name }}</div>
-          <div class="product-desc">{{ product.desc }}</div>
+          <div class="product-desc">{{ product.description || product.desc }}</div>
           <div class="product-bottom">
             <span class="product-price">¥{{ product.price.toFixed(2) }}</span>
             <span v-if="product.originalPrice" class="original-price">¥{{ product.originalPrice.toFixed(2) }}</span>
@@ -62,9 +71,14 @@
           </div>
         </div>
       </div>
-      <div v-if="filteredProducts.length === 0" class="empty-state">
+      <div v-if="filteredProducts.length === 0 && !aiStore.shoppingLoading" class="empty-state">
         <div class="empty-icon"><GradientIcon name="search" :size="40" /></div>
         <div class="empty-text">没有找到相关商品</div>
+        <button class="gen-btn" @click="refreshProducts">AI 生成商品</button>
+      </div>
+      <div v-if="aiStore.shoppingLoading" class="loading-hint">
+        <div class="loading-spinner"></div>
+        <span>AI 正在生成商品...</span>
       </div>
     </div>
 
@@ -168,11 +182,9 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import NavBar from '@/components/common/NavBar.vue'
 import GradientIcon from '@/components/common/GradientIcon.vue'
 import { useWalletStore } from '@/stores/wallet'
-import { shoppingApi } from '@/api/services'
-import { useAuthStore } from '@/stores/auth'
+import { useSocialAIStore } from '@/stores/socialAI'
 
-const authStore = useAuthStore()
-const isLoggedIn = computed(() => !!authStore.token)
+const aiStore = useSocialAIStore()
 
 interface ProductSpec {
   label: string
@@ -180,10 +192,11 @@ interface ProductSpec {
 }
 
 interface Product {
-  id: number
+  id: number | string
   name: string
   iconKey: string
   desc: string
+  description?: string
   fullDesc: string
   price: number
   originalPrice?: number
@@ -201,29 +214,32 @@ interface CartItem {
 const categories = [
   { id: 'all', name: '全部', iconKey: 'all' },
   { id: 'digital', name: '数码', iconKey: 'digital' },
-  { id: 'fashion', name: '服饰', iconKey: 'fashion' },
-  { id: 'beauty', name: '美妆', iconKey: 'beauty' },
-  { id: 'food', name: '食品', iconKey: 'food' },
-  { id: 'home', name: '家居', iconKey: 'home' },
-  { id: 'gift', name: '礼物', iconKey: 'gift' },
+  { id: '服饰', name: '服饰', iconKey: 'fashion' },
+  { id: '美妆', name: '美妆', iconKey: 'beauty' },
+  { id: '食品', name: '食品', iconKey: 'food' },
+  { id: '生活', name: '生活', iconKey: 'home' },
+  { id: '书籍', name: '书籍', iconKey: 'gift' },
 ]
 
-const allProducts = ref<Product[]>([
-  { id: 1, name: 'AirPods Pro 2', iconKey: 'headphones', desc: '主动降噪 / 自适应音频', fullDesc: '全新AirPods Pro 2代，搭载H2芯片，提供高达2倍的主动降噪性能，自适应通透模式，个性化空间音频。', price: 1799, originalPrice: 1999, category: 'digital', sales: 28340, fav: false, specs: [{ label: '芯片', value: 'Apple H2' }, { label: '续航', value: '6小时' }, { label: '充电', value: 'MagSafe / Lightning' }] },
-  { id: 2, name: 'iPhone 15 Pro', iconKey: 'phone', desc: 'A17 Pro芯片 / 钛金属', fullDesc: 'iPhone 15 Pro，采用航空级钛金属设计，A17 Pro芯片带来变革性能。48MP主摄，USB-C接口。', price: 7999, originalPrice: 8999, category: 'digital', sales: 15670, fav: false, specs: [{ label: '芯片', value: 'A17 Pro' }, { label: '屏幕', value: '6.1" OLED' }, { label: '存储', value: '256GB' }] },
-  { id: 3, name: 'MacBook Air M3', iconKey: 'laptop', desc: 'M3芯片 / 18小时续航', fullDesc: 'MacBook Air搭载M3芯片，13.6英寸Liquid Retina显示屏，最长18小时电池续航。', price: 8999, originalPrice: 9999, category: 'digital', sales: 8930, fav: false, specs: [{ label: '芯片', value: 'Apple M3' }, { label: '内存', value: '8GB' }, { label: '续航', value: '18小时' }] },
-  { id: 4, name: '法式连衣裙', iconKey: 'dress', desc: '春季新款 / 碎花设计', fullDesc: '法式优雅碎花连衣裙，甜美浪漫风格，收腰设计显瘦，适合约会/日常穿搭。', price: 299, originalPrice: 599, category: 'fashion', sales: 42100, fav: false, specs: [{ label: '面料', value: '雪纺' }, { label: '尺码', value: 'S/M/L/XL' }, { label: '季节', value: '春夏' }] },
-  { id: 5, name: '情侣卫衣套装', iconKey: 'couple_wear', desc: '加绒保暖 / 情侣款', fullDesc: '宽松休闲情侣卫衣套装，内里加绒保暖，多色可选，情侣一起穿超甜。', price: 199, originalPrice: 398, category: 'fashion', sales: 31500, fav: false, specs: [{ label: '面料', value: '棉+绒' }, { label: '尺码', value: 'M-3XL' }, { label: '颜色', value: '5色' }] },
-  { id: 6, name: 'SK-II 神仙水', iconKey: 'cosmetics', desc: '230ml / 护肤精华', fullDesc: 'SK-II护肤精华露，蕴含超90%的天然活肤酵母精华PITERA™，改善肤质，晶莹剔透。', price: 1190, originalPrice: 1590, category: 'beauty', sales: 19800, fav: false, specs: [{ label: '容量', value: '230ml' }, { label: '肤质', value: '通用' }, { label: '功效', value: '焕肤提亮' }] },
-  { id: 7, name: 'YSL小金条', iconKey: 'lipstick', desc: '#1966 / 正红色', fullDesc: 'YSL圣罗兰小金条口红，丝绒质地，显色持久，#1966经典正红色。', price: 320, originalPrice: 380, category: 'beauty', sales: 55600, fav: false, specs: [{ label: '色号', value: '#1966' }, { label: '质地', value: '丝绒' }, { label: '功效', value: '显色保湿' }] },
-  { id: 8, name: '手工巧克力礼盒', iconKey: 'chocolate', desc: '比利时进口 / 24颗装', fullDesc: '比利时进口手工巧克力礼盒，24颗精选混合口味，送礼自用皆宜。', price: 168, originalPrice: 258, category: 'food', sales: 12300, fav: false, specs: [{ label: '数量', value: '24颗' }, { label: '口味', value: '混合' }, { label: '保质期', value: '6个月' }] },
-  { id: 9, name: '日式抹茶礼盒', iconKey: 'matcha', desc: '宇治抹茶 / 精装', fullDesc: '京都宇治抹茶系列礼盒，含抹茶粉、抹茶饼干、抹茶巧克力，抹茶控必入。', price: 128, category: 'food', sales: 8700, fav: false, specs: [{ label: '产地', value: '日本京都' }, { label: '包含', value: '3件套' }] },
-  { id: 10, name: '香薰蜡烛', iconKey: 'candle', desc: '白茶 / 天然大豆蜡', fullDesc: '天然大豆蜡香薰蜡烛，白茶清香，营造温馨氛围，燃烧时间约50小时。', price: 89, originalPrice: 128, category: 'home', sales: 25400, fav: false, specs: [{ label: '香型', value: '白茶' }, { label: '燃烧', value: '50小时' }, { label: '重量', value: '200g' }] },
-  { id: 11, name: '北欧ins抱枕', iconKey: 'pillow', desc: '天鹅绒 / 45cm', fullDesc: '北欧简约风格抱枕，天鹅绒面料柔软亲肤，45x45cm，含芯。', price: 49, originalPrice: 79, category: 'home', sales: 67800, fav: false, specs: [{ label: '尺寸', value: '45x45cm' }, { label: '面料', value: '天鹅绒' }, { label: '填充', value: 'PP棉' }] },
-  { id: 12, name: '定制情侣项链', iconKey: 'necklace', desc: '纯银 / 刻字定制', fullDesc: '925纯银情侣项链，可定制刻字，锁骨链设计，送给最爱的人。', price: 299, originalPrice: 499, category: 'gift', sales: 14200, fav: false, specs: [{ label: '材质', value: '925银' }, { label: '链长', value: '40+5cm' }, { label: '服务', value: '免费刻字' }] },
-  { id: 13, name: '永生花礼盒', iconKey: 'flower', desc: '厄瓜多尔玫瑰 / 保存3年', fullDesc: '进口厄瓜多尔永生花礼盒，真花制作，保存3年不凋谢，精美礼盒装。', price: 259, originalPrice: 399, category: 'gift', sales: 21300, fav: false, specs: [{ label: '花材', value: '厄瓜多尔玫瑰' }, { label: '保存', value: '3年+' }, { label: '包装', value: '豪华礼盒' }] },
-  { id: 14, name: 'Apple Watch Ultra 2', iconKey: 'watch', desc: '钛金属 / 双频GPS', fullDesc: 'Apple Watch Ultra 2，49mm钛金属表壳，精确双频GPS，最长72小时续航。', price: 5999, originalPrice: 6499, category: 'digital', sales: 6100, fav: false, specs: [{ label: '尺寸', value: '49mm' }, { label: '芯片', value: 'S9 SiP' }, { label: '续航', value: '72小时' }] },
-])
+// Convert AI products to local Product type
+function aiToLocalProducts(): Product[] {
+  return aiStore.shoppingProducts.map((p, i) => ({
+    id: p.id || i,
+    name: p.name,
+    iconKey: p.iconKey || 'gift',
+    desc: p.description || '',
+    description: p.description,
+    fullDesc: p.description || '',
+    price: p.price,
+    originalPrice: p.originalPrice > p.price ? p.originalPrice : undefined,
+    category: p.category,
+    sales: p.sales || Math.floor(Math.random() * 5000),
+    fav: p.fav || false,
+    specs: [],
+  }))
+}
+
+const allProducts = ref<Product[]>([])
 
 const searchText = ref('')
 const activeCategory = ref('all')
@@ -266,15 +282,6 @@ function selectProduct(p: Product) {
 
 async function toggleFav(p: Product) {
   p.fav = !p.fav
-  if (isLoggedIn.value) {
-    try {
-      if (p.fav) {
-        await shoppingApi.addFavorite(p.id)
-      } else {
-        await shoppingApi.removeFavorite(p.id)
-      }
-    } catch { /* ignore */ }
-  }
   saveFavs()
 }
 
@@ -316,17 +323,6 @@ async function buyNow(p: Product, qty: number) {
   })
   orderAmount.value = total
   orderNo.value = 'SP' + Date.now().toString(36).toUpperCase()
-
-  if (isLoggedIn.value) {
-    try {
-      await shoppingApi.createOrder({
-        items: [{ name: p.name, emoji: p.iconKey, price: p.price, quantity: qty }],
-        total,
-        order_no: orderNo.value,
-      })
-    } catch { /* ignore */ }
-  }
-
   selectedProduct.value = null
   orderSuccess.value = true
 }
@@ -345,26 +341,14 @@ async function checkout() {
   })
   orderAmount.value = cartTotal.value
   orderNo.value = 'SP' + Date.now().toString(36).toUpperCase()
-
-  if (isLoggedIn.value) {
-    try {
-      await shoppingApi.createOrder({
-        items: cart.value.map(i => ({
-          name: i.product.name,
-          emoji: i.product.iconKey,
-          price: i.product.price,
-          quantity: i.qty,
-        })),
-        total: cartTotal.value,
-        order_no: orderNo.value,
-      })
-    } catch { /* ignore */ }
-  }
-
   cart.value = []
   saveCart()
   showCart.value = false
   orderSuccess.value = true
+}
+
+function refreshProducts() {
+  aiStore.generateShoppingContent()
 }
 
 const CART_KEY = 'shopping-cart'
@@ -383,28 +367,11 @@ function saveFavs() {
   } catch { /* ignore */ }
 }
 
-async function loadData() {
-  if (isLoggedIn.value) {
-    try {
-      const favRes = await shoppingApi.listFavorites()
-      if (favRes.data) {
-        allProducts.value.forEach(p => { p.fav = favRes.data.includes(p.id) })
-      }
-    } catch {
-      loadLocalFavs()
-    }
-  } else {
-    loadLocalFavs()
-  }
-  loadLocalCart()
-  filterProducts()
-}
-
 function loadLocalFavs() {
   try {
     const saved = localStorage.getItem(FAV_KEY)
     if (saved) {
-      const favIds: number[] = JSON.parse(saved)
+      const favIds = JSON.parse(saved)
       allProducts.value.forEach(p => { p.fav = favIds.includes(p.id) })
     }
   } catch { /* ignore */ }
@@ -414,7 +381,7 @@ function loadLocalCart() {
   try {
     const saved = localStorage.getItem(CART_KEY)
     if (saved) {
-      const items: { id: number; qty: number }[] = JSON.parse(saved)
+      const items: { id: number | string; qty: number }[] = JSON.parse(saved)
       cart.value = items
         .map(i => {
           const product = allProducts.value.find(p => p.id === i.id)
@@ -423,6 +390,27 @@ function loadLocalCart() {
         .filter(Boolean) as CartItem[]
     }
   } catch { /* ignore */ }
+}
+
+function loadData() {
+  // Load AI-generated products if available
+  aiStore.loadData('shopping')
+  if (aiStore.shoppingProducts.length > 0) {
+    const aiProducts = aiToLocalProducts()
+    allProducts.value = [...aiProducts, ...allProducts.value]
+  }
+  loadLocalFavs()
+  loadLocalCart()
+  filterProducts()
+  if (aiStore.shoppingProducts.length === 0) {
+    aiStore.generateShoppingContent().then(() => {
+      if (aiStore.shoppingProducts.length > 0) {
+        const aiProducts = aiToLocalProducts()
+        allProducts.value = [...aiProducts, ...allProducts.value.filter(p => typeof p.id === 'number')]
+        filterProducts()
+      }
+    })
+  }
 }
 
 onMounted(() => {
@@ -938,4 +926,45 @@ onUnmounted(() => {
 
 .empty-state .empty-icon { font-size: 40px; margin-bottom: 8px; }
 .empty-state .empty-text { font-size: 14px; }
+
+.refresh-btn {
+  width: 32px; height: 32px; border: none; background: none;
+  color: var(--brand-primary); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.refresh-btn svg { width: 20px; height: 20px; }
+.refresh-btn svg.spinning { animation: shop-spin 1s linear infinite; }
+
+@keyframes shop-spin { to { transform: rotate(360deg); } }
+
+.loading-hint {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 30px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--fill-tertiary);
+  border-top-color: var(--brand-primary);
+  border-radius: 50%;
+  animation: shop-spin 0.8s linear infinite;
+}
+
+.gen-btn {
+  margin-top: 12px;
+  padding: 8px 20px;
+  border-radius: 10px;
+  border: none;
+  background: var(--brand-primary);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
 </style>
