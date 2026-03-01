@@ -170,6 +170,8 @@ async function requestNonStream(options: AIRequestOptions): Promise<AIResponse> 
         max_tokens: options.maxTokens || 1000,
         temperature: options.temperature ?? 0.9,
         stream: false,
+        apiUrl: options.apiUrl || '',
+        apiKey: options.apiKey || '',
       }),
       signal: controller.signal,
     })
@@ -242,6 +244,8 @@ async function requestStream(options: AIRequestOptions): Promise<AIResponse> {
         max_tokens: options.maxTokens || 1000,
         temperature: options.temperature ?? 0.9,
         stream: true,
+        apiUrl: options.apiUrl || '',
+        apiKey: options.apiKey || '',
       }),
       signal: controller.signal,
     })

@@ -22,6 +22,8 @@ type aiChatRequest struct {
 	MaxTokens   int                      `json:"max_tokens"`
 	Temperature *float64                 `json:"temperature"`
 	Stream      bool                     `json:"stream"`
+	ApiUrl      string                   `json:"apiUrl,omitempty"`
+	ApiKey      string                   `json:"apiKey,omitempty"`
 }
 
 // POST /api/ai/chat
@@ -47,12 +49,24 @@ func (h *AIProxyHandler) Chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get AI settings from app_settings
-	apiUrl, apiKey, err := h.getAISettings(r, userID)
-	if err != nil {
-		mw.Error(w, http.StatusInternalServerError, "failed to get AI settings: "+err.Error())
-		return
+	// Use apiUrl/apiKey from request body first, fallback to app_settings
+	apiUrl := req.ApiUrl
+	apiKey := req.ApiKey
+
+	if apiUrl == "" || apiKey == "" {
+		dbUrl, dbKey, err := h.getAISettings(r, userID)
+		if err != nil {
+			mw.Error(w, http.StatusInternalServerError, "failed to get AI settings: "+err.Error())
+			return
+		}
+		if apiUrl == "" {
+			apiUrl = dbUrl
+		}
+		if apiKey == "" {
+			apiKey = dbKey
+		}
 	}
+
 	if apiUrl == "" || apiKey == "" {
 		mw.Error(w, http.StatusBadRequest, "AI API URL and Key must be configured in settings")
 		return
