@@ -3,39 +3,43 @@
     <NavBar title="餐厅" back-to="/takeaway" />
 
     <div class="page-content">
+      <!-- 生成按钮 -->
+      <button v-if="filteredRestaurants.length === 0 && !loading" class="gen-btn" @click="generateData">
+        ✦ 生成餐厅数据
+      </button>
+
       <!-- 加载 -->
-      <div class="loading" v-if="store.restaurantsLoading">加载中...</div>
+      <div class="loading" v-if="loading">生成中...</div>
 
       <!-- 分类标签 -->
-      <div class="category-tabs" v-if="!store.restaurantsLoading">
+      <div class="category-tabs" v-if="!loading && allRestaurants.length > 0">
         <button
           v-for="cat in categories"
           :key="cat.value"
           class="cat-tab"
           :class="{ active: activeCategory === cat.value }"
-          @click="selectCategory(cat.value)"
+          @click="activeCategory = cat.value"
         >
           {{ cat.icon }} {{ cat.label }}
         </button>
       </div>
 
       <!-- 空状态 -->
-      <div class="empty" v-if="!store.restaurantsLoading && store.restaurants.length === 0">
+      <div class="empty" v-if="!loading && allRestaurants.length > 0 && filteredRestaurants.length === 0">
         <div class="empty-icon">◈</div>
-        <p>暂无餐厅</p>
+        <p>该分类暂无餐厅</p>
       </div>
 
       <!-- 餐厅列表 -->
-      <div class="restaurant-list" v-if="store.restaurants.length > 0">
+      <div class="restaurant-list" v-if="filteredRestaurants.length > 0">
         <div
-          v-for="rest in store.restaurants"
+          v-for="rest in filteredRestaurants"
           :key="rest.id"
           class="restaurant-card"
           @click="selectRestaurant(rest)"
         >
           <div class="rest-image">
-            <img v-if="rest.image_url" :src="rest.image_url" alt="" />
-            <div v-else class="rest-image-placeholder">▢</div>
+            <div class="rest-image-placeholder">▢</div>
           </div>
           <div class="rest-info">
             <div class="rest-name">{{ rest.name }}</div>
@@ -57,30 +61,29 @@
           </div>
 
           <div class="menu-items">
-            <div v-if="!selectedRestaurant.items || selectedRestaurant.items.length === 0" class="menu-empty">
+            <div v-if="!selectedRestaurant.menu || selectedRestaurant.menu.length === 0" class="menu-empty">
               暂无菜品
             </div>
             <div
-              v-for="(item, idx) in selectedRestaurant.items"
+              v-for="(item, idx) in selectedRestaurant.menu"
               :key="idx"
               class="menu-item"
             >
               <div class="item-info">
                 <div class="item-name">{{ item.name }}</div>
-                <div class="item-desc" v-if="item.description">{{ item.description }}</div>
                 <div class="item-price">¥{{ item.price.toFixed(2) }}</div>
               </div>
-              <button class="add-cart-btn" @click="store.addToCart(item.name, item.price)">
+              <button class="add-cart-btn" @click="addToCart(item)">
                 +
               </button>
             </div>
           </div>
 
           <!-- 购物车栏 -->
-          <div class="cart-bar" v-if="store.cartCount > 0">
+          <div class="cart-bar" v-if="cartCount > 0">
             <div class="cart-info">
-              <span class="cart-badge">{{ store.cartCount }}</span>
-              <span class="cart-total">¥{{ store.cartTotal.toFixed(2) }}</span>
+              <span class="cart-badge">{{ cartCount }}</span>
+              <span class="cart-total">¥{{ cartTotal.toFixed(2) }}</span>
             </div>
             <button class="checkout-btn" @click="handleCheckout">去结算</button>
           </div>
@@ -91,55 +94,70 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
 import NavBar from '@/components/common/NavBar.vue'
-import { useTakeawayStore } from '@/stores/takeaway'
-import type { Restaurant } from '@/api/types'
+import { useSocialAIStore } from '@/stores/socialAI'
+import type { TakeawayRestaurant, TakeawayMenuItem } from '@/utils/socialParsers'
 
-const router = useRouter()
-const store = useTakeawayStore()
-
+const socialAI = useSocialAIStore()
+const loading = ref(false)
 const activeCategory = ref('')
-const selectedRestaurant = ref<Restaurant | null>(null)
+const selectedRestaurant = ref<TakeawayRestaurant | null>(null)
+
+// Local cart
+const cart = ref<Map<string, { name: string; price: number; quantity: number }>>(new Map())
+const cartCount = computed(() => Array.from(cart.value.values()).reduce((s, i) => s + i.quantity, 0))
+const cartTotal = computed(() => Array.from(cart.value.values()).reduce((s, i) => s + i.price * i.quantity, 0))
 
 const categories = [
   { value: '', label: '全部', icon: '▲' },
   { value: '快餐', label: '快餐', icon: '◆' },
   { value: '中餐', label: '中餐', icon: '◈' },
-  { value: '日料', label: '日料', icon: '◎' },
+  { value: '火锅', label: '火锅', icon: '◎' },
   { value: '甜品', label: '甜品', icon: '●' },
   { value: '饮品', label: '饮品', icon: '◇' },
+  { value: '烧烤', label: '烧烤', icon: '▣' },
 ]
 
-onMounted(() => {
-  store.fetchRestaurants()
+const allRestaurants = computed(() => socialAI.takeawayRestaurants || [])
+const filteredRestaurants = computed(() => {
+  if (!activeCategory.value) return allRestaurants.value
+  return allRestaurants.value.filter((r: TakeawayRestaurant) =>
+    r.category.includes(activeCategory.value)
+  )
 })
 
-function selectCategory(cat: string) {
-  activeCategory.value = cat
-  store.fetchRestaurants(cat || undefined)
-}
+onMounted(() => {
+  socialAI.loadData('takeaway')
+})
 
-function selectRestaurant(rest: Restaurant) {
-  selectedRestaurant.value = rest
-  store.clearCart()
-}
-
-async function handleCheckout() {
-  if (!selectedRestaurant.value) return
+async function generateData() {
+  loading.value = true
   try {
-    await store.createOrder({
-      restaurant_id: selectedRestaurant.value.id,
-      items: store.cartItems.map(i => ({ name: i.name, price: i.price, quantity: i.quantity })),
-      total: store.cartTotal,
-      address: '默认地址',
-    })
-    selectedRestaurant.value = null
-    router.push('/takeaway/orders')
-  } catch (e) {
-    console.error('下单失败', e)
+    await socialAI.generateTakeawayContent()
+  } finally {
+    loading.value = false
   }
+}
+
+function selectRestaurant(rest: TakeawayRestaurant) {
+  selectedRestaurant.value = rest
+  cart.value = new Map()
+}
+
+function addToCart(item: TakeawayMenuItem) {
+  const existing = cart.value.get(item.name)
+  if (existing) {
+    existing.quantity++
+  } else {
+    cart.value.set(item.name, { name: item.name, price: item.price, quantity: 1 })
+  }
+  cart.value = new Map(cart.value)
+}
+
+function handleCheckout() {
+  selectedRestaurant.value = null
+  cart.value = new Map()
 }
 </script>
 
@@ -156,6 +174,21 @@ async function handleCheckout() {
   overflow-y: auto;
   padding: 16px;
 }
+
+.gen-btn {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, #ff6b35, #ff9553);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 16px;
+}
+
+.gen-btn:active { transform: scale(0.98); }
 
 .loading, .empty {
   text-align: center;

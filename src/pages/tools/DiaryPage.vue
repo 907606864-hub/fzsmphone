@@ -90,20 +90,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import NavBar from '@/components/common/NavBar.vue'
-import { api } from '@/api/client'
+import { useDiaryStore } from '@/stores/diary'
 
-interface Diary {
-  id: number
-  title: string
-  content: string
-  mood: string
-  weather: string
-  tags: string[]
-  is_private: boolean
-  created_at: string
-}
+const store = useDiaryStore()
+const diaries = computed(() => store.diaries)
 
 const moods = [
   { value: 'happy', emoji: '◠' },
@@ -122,11 +114,10 @@ const weathers = [
   { value: 'windy', emoji: '≋' },
 ]
 
-const diaries = ref<Diary[]>([])
 const editing = ref(false)
 const contentRef = ref<HTMLTextAreaElement | null>(null)
 
-const editingDiary = reactive<Partial<Diary>>({
+const editingDiary = reactive<Record<string, any>>({
   title: '',
   content: '',
   mood: 'calm',
@@ -171,7 +162,7 @@ function startNew() {
   editing.value = true
 }
 
-function openDiary(diary: Diary) {
+function openDiary(diary: any) {
   editingId = diary.id
   editingDiary.title = diary.title
   editingDiary.content = diary.content
@@ -187,25 +178,22 @@ function cancelEdit() {
 }
 
 async function saveDiary() {
-  try {
-    if (editingId) {
-      await api.put(`/api/diaries/${editingId}`, editingDiary)
-    } else {
-      await api.post('/api/diaries', editingDiary)
-    }
-    editing.value = false
-    fetchDiaries()
-  } catch { /* empty */ }
+  const data = {
+    title: editingDiary.title,
+    content: editingDiary.content,
+    mood: editingDiary.mood,
+    weather: editingDiary.weather,
+    tags: editingDiary.tags,
+  }
+  if (editingId) {
+    await store.updateDiary(editingId, data as any)
+  } else {
+    await store.createDiary(data as any)
+  }
+  editing.value = false
 }
 
-async function fetchDiaries() {
-  try {
-    const res = await api.get<{ data: Diary[] }>('/api/diaries')
-    diaries.value = res.data || []
-  } catch { /* empty */ }
-}
-
-onMounted(fetchDiaries)
+onMounted(() => store.fetchDiaries())
 </script>
 
 <style scoped>

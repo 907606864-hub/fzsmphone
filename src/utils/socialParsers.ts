@@ -1323,7 +1323,10 @@ export function parseTheaterContent(raw: string): TheaterData {
   return { dramas }
 }
 
-// ==================== 外卖数据类型 ====================
+export interface TakeawayMenuItem {
+  name: string
+  price: number
+}
 
 export interface TakeawayRestaurant {
   id: string
@@ -1333,6 +1336,7 @@ export interface TakeawayRestaurant {
   delivery_time: string
   min_order: number
   image_url: string
+  menu: TakeawayMenuItem[]
 }
 
 export interface TakeawayData {
@@ -1385,7 +1389,21 @@ export function parseTakeawayContent(raw: string): TakeawayData {
       delivery_time: m[4].trim(),
       min_order: parseFloat(m[5].trim()) || 0,
       image_url: '',
+      menu: [],
     })
+  }
+
+  // [菜品|餐厅名称|菜品名称|价格]
+  const menuRe = /\[菜品\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+  while ((m = menuRe.exec(content)) !== null) {
+    const restName = m[1].trim()
+    const rest = restaurants.find(r => r.name === restName)
+    if (rest) {
+      rest.menu.push({
+        name: m[2].trim(),
+        price: parseFloat(m[3].trim()) || 15,
+      })
+    }
   }
 
   console.log(`[SocialParser] Takeaway: ${restaurants.length} restaurants`)

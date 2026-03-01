@@ -132,9 +132,9 @@ interface PastDate {
 }
 
 const pastDates = ref<PastDate[]>([
-  { id: 1, icon: '', title: '日料探店', date: '2024-12-20', rating: 5 },
-  { id: 2, icon: '', title: '看《你的名字》', date: '2024-12-15', rating: 4 },
-  { id: 3, icon: '', title: '西湖骑行', date: '2024-11-28', rating: 5 },
+  { id: 1, icon: '◈', title: '日料探店', date: '2024-12-20', rating: 5 },
+  { id: 2, icon: '▷', title: '看《你的名字》', date: '2024-12-15', rating: 4 },
+  { id: 3, icon: '△', title: '西湖骑行', date: '2024-11-28', rating: 5 },
 ])
 
 const planTemplates: Record<string, DatePlan> = {
@@ -173,6 +173,66 @@ const planTemplates: Record<string, DatePlan> = {
     ],
     budget: 200,
     duration: '6小时',
+  },
+  '逛街约会': {
+    title: '▢ 甜蜜逛街日',
+    steps: [
+      { time: '13:00', title: '商场见面', desc: '在最喜欢的商场门口碰头', done: false },
+      { time: '13:30', title: '逛服装店', desc: '互相帮对方挑选衣服', done: false },
+      { time: '15:00', title: '奶茶时间', desc: '点两杯当季限定奶茶', done: false },
+      { time: '16:00', title: '看新品', desc: '去数码店/饰品店逛逛', done: false },
+      { time: '17:30', title: '晚餐', desc: '在商场里找一家好店吃晚饭', done: false },
+    ],
+    budget: 600,
+    duration: '5小时',
+  },
+  '游戏约会': {
+    title: '▶ 欢乐游戏日',
+    steps: [
+      { time: '14:00', title: '准备零食', desc: '买好薯片、饮料和小蛋糕', done: false },
+      { time: '14:30', title: '双人游戏', desc: '一起玩合作或对战游戏', done: false },
+      { time: '16:00', title: '桌游时间', desc: '玩一局UNO或狼人杀', done: false },
+      { time: '17:30', title: '点外卖', desc: '一起选想吃的外卖', done: false },
+      { time: '19:00', title: '看直播/电影', desc: '窝在沙发上看喜欢的节目', done: false },
+    ],
+    budget: 150,
+    duration: '5小时',
+  },
+  '文艺约会': {
+    title: '▥ 文艺漫步日',
+    steps: [
+      { time: '10:00', title: '去书店', desc: '在独立书店里各选一本书', done: false },
+      { time: '11:30', title: '咖啡厅', desc: '找一家安静的咖啡厅坐下来', done: false },
+      { time: '13:00', title: '简餐', desc: '在文艺小餐厅吃个轻食', done: false },
+      { time: '14:00', title: '看展览', desc: '去美术馆或画廊看展', done: false },
+      { time: '16:00', title: '手作体验', desc: '一起做陶艺/画画/押花', done: false },
+    ],
+    budget: 350,
+    duration: '6小时',
+  },
+  '演出约会': {
+    title: '◈ 精彩演出夜',
+    steps: [
+      { time: '16:00', title: '精心打扮', desc: '穿上最好看的衣服准备出发', done: false },
+      { time: '17:00', title: '提前晚餐', desc: '在演出场地附近吃晚饭', done: false },
+      { time: '18:30', title: '入场准备', desc: '到达场馆，拍照留念', done: false },
+      { time: '19:00', title: '观看演出', desc: '全身心投入精彩的表演', done: false },
+      { time: '21:30', title: '散场交流', desc: '边走边聊演出的精彩片段', done: false },
+    ],
+    budget: 800,
+    duration: '6小时',
+  },
+  '宅家约会': {
+    title: '⌂ 温馨宅家日',
+    steps: [
+      { time: '10:00', title: '一起做早餐', desc: '做个丰盛的早午餐', done: false },
+      { time: '11:00', title: '追剧时间', desc: '窝在沙发上看想追的剧', done: false },
+      { time: '13:00', title: '一起做饭', desc: '尝试做一道新菜', done: false },
+      { time: '15:00', title: '甜品DIY', desc: '一起做蛋糕或饼干', done: false },
+      { time: '17:00', title: '游戏/聊天', desc: '玩游戏或聊聊心里话', done: false },
+    ],
+    budget: 100,
+    duration: '7小时',
   },
 }
 

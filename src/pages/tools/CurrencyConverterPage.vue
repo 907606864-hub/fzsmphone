@@ -146,7 +146,7 @@ const commonRates = computed(() => {
     .map((c) => ({
       ...c,
       rate: c.rateToUSD / base.rateToUSD,
-      change: (Math.random() - 0.5) * 2,
+      change: parseFloat(((c.rateToUSD * 7.13 + base.rateToUSD * 3.17) % 3 - 1.5).toFixed(2)),
     }))
 })
 
