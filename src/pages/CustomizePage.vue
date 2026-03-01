@@ -47,6 +47,7 @@
             <option value="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions">Gemini AI Studio</option>
             <option value="https://api.openai.com/v1/chat/completions">OpenAI</option>
             <option value="https://openrouter.ai/api/v1/chat/completions">Claude (OpenRouter)</option>
+            <option value="https://api.deepseek.com/chat/completions">DeepSeek</option>
             <option value="custom">自定义地址</option>
           </select>
 

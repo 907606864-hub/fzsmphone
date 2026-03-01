@@ -221,6 +221,7 @@ func New(cfg *config.Config, db *database.DB, hub *ws.Hub) http.Handler {
 
 			// === AI Proxy ===
 			r.Post("/ai/chat", aiProxyH.Chat)
+			r.Post("/ai/models", aiProxyH.Models)
 		})
 	})
 

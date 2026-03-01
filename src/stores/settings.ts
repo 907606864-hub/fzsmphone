@@ -120,7 +120,7 @@ export const useSettingsStore = defineStore('settings', () => {
     return settings.value.apiUrl
   }
 
-  // 拉取模型列表
+  // 拉取模型列表（通过后端代理避免 CORS）
   async function fetchModels(): Promise<string[]> {
     const apiKey = settings.value.apiKey
     if (!apiKey) throw new Error('请先输入 API Key')
@@ -128,27 +128,23 @@ export const useSettingsStore = defineStore('settings', () => {
     const apiUrl = getApiUrl()
     if (!apiUrl) throw new Error('请先配置 API 地址')
 
-    // 构建 models URL
-    let modelsUrl = ''
-    if (apiUrl.includes('/chat/completions')) {
-      modelsUrl = apiUrl.replace('/chat/completions', '/models')
-    } else if (apiUrl.endsWith('/v1')) {
-      modelsUrl = `${apiUrl}/models`
-    } else if (apiUrl.includes('/v1')) {
-      modelsUrl = apiUrl.replace(/\/v1.*$/, '/v1/models')
-    } else {
-      modelsUrl = `${apiUrl.replace(/\/$/, '')}/v1/models`
-    }
+    const API_BASE = import.meta.env.VITE_API_URL || ''
+    const token = localStorage.getItem('token') || ''
 
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 15000)
 
     try {
-      const response = await fetch(modelsUrl, {
-        method: 'GET',
+      const response = await fetch(`${API_BASE}/api/ai/models`, {
+        method: 'POST',
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({
+          apiUrl: apiUrl,
+          apiKey: apiKey,
+        }),
         signal: controller.signal,
       })
 

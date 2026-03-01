@@ -149,6 +149,68 @@ func (h *AIProxyHandler) Chat(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// POST /api/ai/models
+// Proxies model-list requests to the configured AI API endpoint.
+func (h *AIProxyHandler) Models(w http.ResponseWriter, r *http.Request) {
+	userID, ok := mw.GetUserID(r.Context())
+	if !ok {
+		mw.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req struct {
+		ApiUrl string `json:"apiUrl,omitempty"`
+		ApiKey string `json:"apiKey,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		mw.Error(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	apiUrl := req.ApiUrl
+	apiKey := req.ApiKey
+
+	if apiUrl == "" || apiKey == "" {
+		dbUrl, dbKey, err := h.getAISettings(r, userID)
+		if err != nil {
+			mw.Error(w, http.StatusInternalServerError, "failed to get AI settings: "+err.Error())
+			return
+		}
+		if apiUrl == "" {
+			apiUrl = dbUrl
+		}
+		if apiKey == "" {
+			apiKey = dbKey
+		}
+	}
+
+	if apiUrl == "" || apiKey == "" {
+		mw.Error(w, http.StatusBadRequest, "AI API URL and Key must be configured in settings")
+		return
+	}
+
+	modelsEndpoint := deriveModelsUrl(apiUrl)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	upReq, err := http.NewRequestWithContext(r.Context(), "GET", modelsEndpoint, nil)
+	if err != nil {
+		mw.Error(w, http.StatusInternalServerError, "failed to create upstream request")
+		return
+	}
+	upReq.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := client.Do(upReq)
+	if err != nil {
+		mw.Error(w, http.StatusBadGateway, "AI API request failed: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
+}
+
 // getAISettings retrieves apiUrl and apiKey from the app_settings table
 func (h *AIProxyHandler) getAISettings(r *http.Request, userID int64) (string, string, error) {
 	_ = userID // settings are global for now
@@ -181,7 +243,7 @@ func normalizeAPIUrl(url string) string {
 	if url == "" {
 		return url
 	}
-	if strings.HasSuffix(url, "/chat/completions") {
+	if strings.Contains(url, "/chat/completions") {
 		return url
 	}
 	if strings.HasSuffix(url, "/v1") {
@@ -190,5 +252,19 @@ func normalizeAPIUrl(url string) string {
 	if idx := strings.Index(url, "/v1"); idx >= 0 {
 		return url[:idx+3] + "/chat/completions"
 	}
-	return strings.TrimRight(url, "/") + "/v1/chat/completions"
+	return strings.TrimRight(url, "/") + "/chat/completions"
+}
+
+// deriveModelsUrl converts an API URL to the corresponding /models endpoint
+func deriveModelsUrl(url string) string {
+	if strings.Contains(url, "/chat/completions") {
+		return strings.Replace(url, "/chat/completions", "/models", 1)
+	}
+	if strings.HasSuffix(url, "/v1") {
+		return url + "/models"
+	}
+	if idx := strings.Index(url, "/v1"); idx >= 0 {
+		return url[:idx+3] + "/models"
+	}
+	return strings.TrimRight(url, "/") + "/models"
 }

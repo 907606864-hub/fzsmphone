@@ -92,7 +92,7 @@ function normalizeApiUrl(url: string): string {
   if (url.includes('/chat/completions')) return url
   if (url.endsWith('/v1')) return `${url}/chat/completions`
   if (url.includes('/v1')) return url.replace(/\/v1.*$/, '/v1/chat/completions')
-  return `${url.replace(/\/$/, '')}/v1/chat/completions`
+  return `${url.replace(/\/$/, '')}/chat/completions`
 }
 
 /**
