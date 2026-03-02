@@ -172,23 +172,42 @@ function preprocessContent(content: string): string {
 
 /**
  * 提取标记区域内容，如果标记不存在则返回整个文本
+ * 支持 AI 返回 <!-- MAP_CONTENT_START --> 或 <!-- MAP CONTENT START --> 等变体
  */
 function extractMarkedContent(content: string, startMarker: string, endMarker: string): string {
-  // 1. 尝试完整标记匹配
-  const fullRegex = new RegExp(`${escapeRegex(startMarker)}([\\s\\S]*?)${escapeRegex(endMarker)}`)
+  // 构建灵活正则：将下划线和空格都视为分隔符
+  function buildFlexiblePattern(marker: string): string {
+    return escapeRegex(marker)
+      .replace(/\\_/g, '[_ ]+')
+      .replace(/ /g, '[_ ]+')
+  }
+
+  const startPat = buildFlexiblePattern(startMarker)
+  const endPat = buildFlexiblePattern(endMarker)
+
+  // 1. 尝试完整标记匹配（灵活）
+  const fullRegex = new RegExp(`${startPat}([\\s\\S]*?)${endPat}`, 'i')
   const fullMatch = content.match(fullRegex)
   if (fullMatch) {
     return fullMatch[1]
   }
 
-  // 2. 只有开始标记（结束标记被截断）
+  // 2. 只有开始标记（结束标记被截断）——灵活匹配
+  const startOnlyRegex = new RegExp(startPat, 'i')
+  const startOnlyMatch = content.match(startOnlyRegex)
+  if (startOnlyMatch && startOnlyMatch.index !== undefined) {
+    console.log(`[SocialParser] 找到开始标记但未找到结束标记，取开始标记之后全部内容`)
+    return content.slice(startOnlyMatch.index + startOnlyMatch[0].length)
+  }
+
+  // 3. 精确匹配（向后兼容）
   const startIdx = content.indexOf(startMarker)
   if (startIdx !== -1) {
-    console.log(`[SocialParser] 找到开始标记但未找到结束标记，取开始标记之后全部内容`)
+    console.log(`[SocialParser] 精确匹配开始标记`)
     return content.slice(startIdx + startMarker.length)
   }
 
-  // 3. 都没找到，返回全文
+  // 4. 都没找到，返回全文
   console.log(`[SocialParser] 未找到标记 ${startMarker}，将在全文中搜索格式化内容`)
   return content
 }
@@ -1631,15 +1650,9 @@ export interface EmailData {
 // ==================== 邮箱解析器 ====================
 
 export function parseEmailContent(raw: string): EmailData {
+  const processed = preprocessContent(raw)
+  const content = extractMarkedContent(processed, '<!-- EMAIL_CONTENT_START -->', '<!-- EMAIL_CONTENT_END -->')
   const emails: EmailItem[] = []
-
-  const startMarker = '<!-- EMAIL_CONTENT_START -->'
-  const endMarker = '<!-- EMAIL_CONTENT_END -->'
-  const startIdx = raw.indexOf(startMarker)
-  const endIdx = raw.indexOf(endMarker)
-  const content = startIdx >= 0 && endIdx >= 0
-    ? raw.slice(startIdx + startMarker.length, endIdx)
-    : raw
 
   let m: RegExpExecArray | null
 
@@ -1722,15 +1735,9 @@ export interface BrowserData {
 // ==================== 浏览器解析器 ====================
 
 export function parseBrowserContent(raw: string): BrowserData {
+  const processed = preprocessContent(raw)
+  const content = extractMarkedContent(processed, '<!-- BROWSER_CONTENT_START -->', '<!-- BROWSER_CONTENT_END -->')
   const results: BrowserResult[] = []
-
-  const startMarker = '<!-- BROWSER_CONTENT_START -->'
-  const endMarker = '<!-- BROWSER_CONTENT_END -->'
-  const startIdx = raw.indexOf(startMarker)
-  const endIdx = raw.indexOf(endMarker)
-  const content = startIdx >= 0 && endIdx >= 0
-    ? raw.slice(startIdx + startMarker.length, endIdx)
-    : raw
 
   let m: RegExpExecArray | null
 
@@ -1782,15 +1789,12 @@ export interface MapData {
 // ==================== 地图解析器 ====================
 
 export function parseMapContent(raw: string): MapData {
+  const processed = preprocessContent(raw)
+  const content = extractMarkedContent(processed, '<!-- MAP_CONTENT_START -->', '<!-- MAP_CONTENT_END -->')
   const locations: MapLocation[] = []
 
-  const startMarker = '<!-- MAP_CONTENT_START -->'
-  const endMarker = '<!-- MAP_CONTENT_END -->'
-  const startIdx = raw.indexOf(startMarker)
-  const endIdx = raw.indexOf(endMarker)
-  const content = startIdx >= 0 && endIdx >= 0
-    ? raw.slice(startIdx + startMarker.length, endIdx)
-    : raw
+  console.log(`[SocialParser] Map raw长度: ${raw.length}, 提取内容长度: ${content.length}`)
+  console.log(`[SocialParser] Map 提取内容: ${content.slice(0, 300)}`)
 
   let m: RegExpExecArray | null
 
@@ -1822,6 +1826,36 @@ export function parseMapContent(raw: string): MapData {
     }
   }
 
+  // 3字段（仅名称、类型、描述）——最低匹配
+  if (locations.length === 0) {
+    const locRe3 = /\[地点\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+    while ((m = locRe3.exec(content)) !== null) {
+      locations.push({
+        id: generateId('loc'),
+        name: m[1].trim(),
+        type: m[2].trim(),
+        description: m[3].trim(),
+        characters: [],
+        events: [],
+      })
+    }
+  }
+
+  // 不完整匹配（被截断的条目）
+  if (locations.length === 0) {
+    const incompleteRe = /\[地点\|([^|\]]+)\|([^|\]]+)\|?([^|\]]*)/g
+    while ((m = incompleteRe.exec(content)) !== null) {
+      locations.push({
+        id: generateId('loc'),
+        name: m[1].trim(),
+        type: m[2].trim(),
+        description: m[3]?.trim() || '(描述被截断)',
+        characters: [],
+        events: [],
+      })
+    }
+  }
+
   console.log(`[SocialParser] Map: ${locations.length} locations`)
   return { locations }
 }
@@ -1845,15 +1879,9 @@ export interface CalendarData {
 // ==================== 日历解析器 ====================
 
 export function parseCalendarContent(raw: string): CalendarData {
+  const processed = preprocessContent(raw)
+  const content = extractMarkedContent(processed, '<!-- CALENDAR_CONTENT_START -->', '<!-- CALENDAR_CONTENT_END -->')
   const events: CalendarEvent[] = []
-
-  const startMarker = '<!-- CALENDAR_CONTENT_START -->'
-  const endMarker = '<!-- CALENDAR_CONTENT_END -->'
-  const startIdx = raw.indexOf(startMarker)
-  const endIdx = raw.indexOf(endMarker)
-  const content = startIdx >= 0 && endIdx >= 0
-    ? raw.slice(startIdx + startMarker.length, endIdx)
-    : raw
 
   let m: RegExpExecArray | null
 
@@ -1882,6 +1910,38 @@ export function parseCalendarContent(raw: string): CalendarData {
         time: m[3].trim(),
         type: m[4].trim(),
         description: m[5].trim(),
+        participants: [],
+      })
+    }
+  }
+
+  // 5字段（无描述和参与人）
+  if (events.length === 0) {
+    const evtRe5 = /\[事件\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g
+    while ((m = evtRe5.exec(content)) !== null) {
+      events.push({
+        id: generateId('evt'),
+        title: m[1].trim(),
+        date: m[2].trim(),
+        time: m[3].trim(),
+        type: m[4].trim(),
+        description: '',
+        participants: [],
+      })
+    }
+  }
+
+  // 不完整匹配
+  if (events.length === 0) {
+    const incompleteRe = /\[事件\|([^|\]]+)\|([^|\]]+)\|?([^|\]]*)/g
+    while ((m = incompleteRe.exec(content)) !== null) {
+      events.push({
+        id: generateId('evt'),
+        title: m[1].trim(),
+        date: m[2].trim(),
+        time: m[3]?.trim() || '',
+        type: '其他',
+        description: '(被截断)',
         participants: [],
       })
     }

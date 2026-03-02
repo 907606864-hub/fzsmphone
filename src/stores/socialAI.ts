@@ -1080,7 +1080,7 @@ export const useSocialAIStore = defineStore('socialAI', () => {
         browserResults.value = data.results
         saveData('browser')
       } else {
-        lastError.value = 'AI未生成有效的搜索结果'
+        lastError.value = 'AI未生成有效的搜索结果。AI返回: ' + raw.slice(0, 200)
       }
     } catch (e: any) {
       lastError.value = e.message || '生成失败'
@@ -1103,7 +1103,7 @@ export const useSocialAIStore = defineStore('socialAI', () => {
         mapLocations.value = data.locations
         saveData('map')
       } else {
-        lastError.value = 'AI未生成有效的地图内容'
+        lastError.value = 'AI未生成有效的地图内容。AI返回: ' + raw.slice(0, 200)
       }
     } catch (e: any) {
       lastError.value = e.message || '生成失败'
@@ -1126,7 +1126,7 @@ export const useSocialAIStore = defineStore('socialAI', () => {
         calendarEvents.value = data.events
         saveData('calendar')
       } else {
-        lastError.value = 'AI未生成有效的日历内容'
+        lastError.value = 'AI未生成有效的日历内容。AI返回: ' + raw.slice(0, 200)
       }
     } catch (e: any) {
       lastError.value = e.message || '生成失败'
