@@ -379,47 +379,57 @@ export const useSocialAIStore = defineStore('socialAI', () => {
     } catch { /* ignore */ }
   }
 
-  
-// ==================== 通用图片生成处理 ====================
-function handleImagePromptsGenerically(content: string, parsedData: any, saveCallback: () => void) {
-  const prompts = parseImagePrompts(content)
-  if (Object.keys(prompts).length === 0) return
 
-  const shouldAutoGenerate = isSocialAutoImageGenEnabled()
-
-  const stack = [parsedData]
-  const seen = new Set()
-  
-  while (stack.length > 0) {
-    const curr = stack.pop()
-    if (!curr || typeof curr !== 'object' || seen.has(curr)) continue
-    seen.add(curr)
-    
-    if (curr.id && prompts[curr.id]) {
-      curr.imagePrompt = prompts[curr.id]
-      if (!curr.images) curr.images = []
-      
-      if (shouldAutoGenerate && curr.images.length === 0) {
-        generateImageFromPrompt(curr.imagePrompt).then(url => {
-          if (url) {
-            curr.images.push(url)
-            saveCallback()
-          }
-        }).catch(err => {
-          console.error(`[Social Image Gen] Failed for ${curr.id}: ${err.message}`)
-        })
-      }
+  // ==================== 通用图片生成处理 ====================
+  function handleImagePromptsGenerically(content: string, parsedData: any, saveCallback: () => void) {
+    const prompts = parseImagePrompts(content)
+    if (Object.keys(prompts).length === 0) {
+      console.log('[Social Image Gen] 未找到 [图片提示|...] 标记，跳过生图')
+      return
     }
-    
-    for (const key of Object.keys(curr)) {
-      if (typeof curr[key] === 'object') {
-        stack.push(curr[key])
+
+    console.log(`[Social Image Gen] 提取到 ${Object.keys(prompts).length} 个图片提示:`, prompts)
+    const shouldAutoGenerate = isSocialAutoImageGenEnabled()
+    if (!shouldAutoGenerate) {
+      console.log('[Social Image Gen] 社交自动生图已关闭，跳过')
+    }
+
+    const stack = [parsedData]
+    const seen = new Set()
+
+    while (stack.length > 0) {
+      const curr = stack.pop()
+      if (!curr || typeof curr !== 'object' || seen.has(curr)) continue
+      seen.add(curr)
+
+      if (curr.id && prompts[curr.id]) {
+        curr.imagePrompt = prompts[curr.id]
+        if (!curr.images) curr.images = []
+
+        if (shouldAutoGenerate && curr.images.length === 0) {
+          const itemId = curr.id
+          console.log(`[Social Image Gen] 开始为 ${itemId} 生图: ${curr.imagePrompt.slice(0, 80)}...`)
+          generateImageFromPrompt(curr.imagePrompt).then(url => {
+            if (url) {
+              curr.images.push(url)
+              saveCallback()
+              console.log(`[Social Image Gen] ✅ ${itemId} 生图成功，dataUrl 长度: ${url.length}`)
+            }
+          }).catch(err => {
+            console.error(`[Social Image Gen] ❌ ${itemId} 生图失败: ${err.message}`)
+          })
+        }
+      }
+
+      for (const key of Object.keys(curr)) {
+        if (typeof curr[key] === 'object') {
+          stack.push(curr[key])
+        }
       }
     }
   }
-}
 
-// ==================== AI调用核心 ====================
+  // ==================== AI调用核心 ====================
   async function callAI(type: SocialType, action?: string): Promise<string> {
     const config = getAIConfig()
     if (!config.apiKey || !config.apiUrl || !config.model) {
@@ -462,7 +472,7 @@ function handleImagePromptsGenerically(content: string, parsedData: any, saveCal
     try {
       const content = await callAI('forum', action)
       const data = parseForumContent(content)
-        handleImagePromptsGenerically(content, data, () => saveData('forum'))
+      handleImagePromptsGenerically(content, data, () => saveData('forum'))
 
       if (data.threads.length > 0) {
         // 合并新帖子（避免重复id）
@@ -538,7 +548,7 @@ function handleImagePromptsGenerically(content: string, parsedData: any, saveCal
     try {
       const content = await callAI('weibo', action)
       const data = parseWeiboContent(content)
-        handleImagePromptsGenerically(content, data, () => saveData('weibo'))
+      handleImagePromptsGenerically(content, data, () => saveData('weibo'))
 
       if (data.posts.length > 0 || data.hotSearches.length > 0) {
         // 合并博文
@@ -632,7 +642,7 @@ function handleImagePromptsGenerically(content: string, parsedData: any, saveCal
     try {
       const content = await callAI('moments', action)
       const data = parseMomentsContent(content)
-        handleImagePromptsGenerically(content, data, () => saveData('moments'))
+      handleImagePromptsGenerically(content, data, () => saveData('moments'))
 
       if (data.moments.length > 0) {
         const existingIds = new Set(moments.value.map(m => m.id))
@@ -725,7 +735,7 @@ function handleImagePromptsGenerically(content: string, parsedData: any, saveCal
     try {
       const content = await callAI('zhihu', action)
       const data = parseZhihuContent(content)
-        handleImagePromptsGenerically(content, data, () => saveData('zhihu'))
+      handleImagePromptsGenerically(content, data, () => saveData('zhihu'))
 
       if (data.questions.length > 0) {
         const existingIds = new Set(zhihuQuestions.value.map(q => q.id))
@@ -797,7 +807,7 @@ function handleImagePromptsGenerically(content: string, parsedData: any, saveCal
     try {
       const content = await callAI('xiaohongshu', action)
       const data = parseXhsContent(content)
-        handleImagePromptsGenerically(content, data, () => saveData('xiaohongshu'))
+      handleImagePromptsGenerically(content, data, () => saveData('xiaohongshu'))
 
       if (data.notes.length > 0) {
         const existingIds = new Set(xhsNotes.value.map(n => n.id))
@@ -853,7 +863,7 @@ function handleImagePromptsGenerically(content: string, parsedData: any, saveCal
     try {
       const content = await callAI('douyin', action)
       const data = parseDouyinContent(content)
-        handleImagePromptsGenerically(content, data, () => saveData('douyin'))
+      handleImagePromptsGenerically(content, data, () => saveData('douyin'))
 
       if (data.videos.length > 0) {
         const existingIds = new Set(douyinVideos.value.map(v => v.id))
