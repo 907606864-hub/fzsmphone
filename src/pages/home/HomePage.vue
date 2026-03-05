@@ -139,6 +139,7 @@ const allApps: AppItem[] = [
   { name: '知乎', iconKey: 'zhihu', color: 'linear-gradient(135deg, #0066FF, #3399FF)', route: '/zhihu', featureId: 'zhihu' },
   { name: '小红书', iconKey: 'xiaohongshu', color: 'linear-gradient(135deg, #FF2442, #FF6B81)', route: '/xiaohongshu', featureId: 'xiaohongshu' },
   { name: '抖音', iconKey: 'douyin', color: 'linear-gradient(135deg, #25F4EE, #FE2C55)', route: '/douyin', featureId: 'douyin' },
+  { name: 'Discord', iconKey: 'discord', color: 'linear-gradient(135deg, #5865F2, #7289DA)', route: '/discord', featureId: 'discord' },
   { name: '邮箱', iconKey: 'email', color: 'linear-gradient(135deg, #4A90D9, #357ABD)', route: '/email', featureId: 'email' },
   { name: '浏览器', iconKey: 'browser', color: 'linear-gradient(135deg, #4285F4, #34A853)', route: '/browser', featureId: 'browser' },
   { name: '地图', iconKey: 'map', color: 'linear-gradient(135deg, #34A853, #FBBC05)', route: '/map', featureId: 'map' },

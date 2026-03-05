@@ -37,6 +37,7 @@ const routeFeatureMap: Record<string, string> = {
   Zhihu: 'zhihu',
   Xiaohongshu: 'xiaohongshu',
   Douyin: 'douyin',
+  Discord: 'discord',
   Email: 'email',
   Browser: 'browser',
   Map: 'map',
@@ -127,6 +128,11 @@ const routes: RouteRecordRaw[] = [
     path: '/xiaohongshu',
     name: 'Xiaohongshu',
     component: () => import('@/pages/social/XiaohongshuPage.vue'),
+  },
+  {
+    path: '/discord',
+    name: 'Discord',
+    component: () => import('@/pages/social/DiscordPage.vue'),
   },
   // === 生活服务 ===
   {
