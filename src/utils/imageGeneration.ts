@@ -13,6 +13,10 @@ import {
 
 // ==================== 代理请求 ====================
 
+function getAuthToken(): string {
+    return localStorage.getItem('token') || ''
+}
+
 async function proxyFetch(
     targetUrl: string,
     apiKey: string,
@@ -22,7 +26,10 @@ async function proxyFetch(
 ): Promise<Response> {
     return fetch('/api/ai/image', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getAuthToken()}`,
+        },
         body: JSON.stringify({ targetUrl, apiKey, headers, body }),
         signal,
     })
