@@ -127,6 +127,20 @@ const AVATAR_COLORS = [
   '#b7d3a8', '#3e7b41', '#f9e79f', '#a3b4e2',
 ]
 
+
+// ==================== 图片提示通用提取 ====================
+export function parseImagePrompts(content: string): Record<string, string> {
+  const prompts: Record<string, string> = {}
+  const regex = /\[图片提示\|([^|]+)\|([^\]]+)\]/g
+  let m: RegExpExecArray | null
+  while ((m = regex.exec(content)) !== null) {
+    let id = m[1].trim()
+    let pt = m[2].trim()
+    prompts[id] = pt
+  }
+  return prompts
+}
+
 export function hashUsername(username: string): number {
   let hash = 0
   if (!username || username.length === 0) return hash

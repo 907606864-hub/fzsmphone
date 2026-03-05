@@ -111,7 +111,33 @@
                 <span class="rqi-name">{{ (msg.extra as any).replyTo.role === 'user' ? '我' : chatTitle }}</span>
                 <span class="rqi-text">{{ truncateText((msg.extra as any).replyTo.content, 40) }}</span>
               </div>
-              <p class="msg-text">{{ msg.content }}</p>
+              <div class="msg-text">
+                <template v-for="(seg, idx) in parseMessageContent(msg.content)" :key="idx">
+                  <span v-if="seg.type === 'text'" style="white-space: pre-wrap;">{{ seg.content }}</span>
+                  <div v-else-if="seg.type === 'image-prompt'" class="chat-image-block">
+                    <img v-if="msg.extra?.images?.[idx]?.url" :src="msg.extra.images[idx].url" class="chat-generated-image" @click.stop="previewImage(msg.extra.images[idx].url)" />
+                    
+                    <div v-else-if="msg.extra?.images?.[idx]?.error" class="chat-image-error" @click.stop="handleGenerateImage(msg, seg.prompt!, idx)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                      <span>生图失败重试</span>
+                    </div>
+
+                    <div v-else-if="msg.extra?.images?.[idx]?.loading" class="chat-image-loading">
+                      <div class="spinner"></div>
+                      <span>正在生成...</span>
+                    </div>
+
+                    <div v-else class="chat-image-trigger" @click.stop="handleGenerateImage(msg, seg.prompt!, idx)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21 15 16 10 5 21"/>
+                      </svg>
+                      <span>点击生成图片</span>
+                    </div>
+                  </div>
+                </template>
+              </div>
               <span class="msg-time">{{ formatMsgTime(msg.created_at) }}</span>
             </div>
 
@@ -133,7 +159,12 @@
             </span>
           </div>
           <div class="msg-bubble assistant typing-bubble">
-            <div v-if="streamingText" class="msg-text">{{ streamingText }}</div>
+            <div v-if="streamingText" class="msg-text">
+              <template v-for="(seg, idx) in parseMessageContent(streamingText)" :key="idx">
+                <span v-if="seg.type === 'text'" style="white-space: pre-wrap;">{{ seg.content }}</span>
+                <span v-else class="chat-image-streaming-hint">[收到生图指令...]</span>
+              </template>
+            </div>
             <div v-else class="typing-dots">
               <span></span><span></span><span></span>
             </div>
@@ -404,6 +435,7 @@ import {
   matchWorldBookEntries,
 } from '@/utils/aiService'
 import type { AIMessage, CharacterData } from '@/utils/aiService'
+import { generateImageFromPrompt, isChatAutoImageGenEnabled } from '@/utils/imageGenService'
 
 const route = useRoute()
 const router = useRouter()
@@ -428,6 +460,70 @@ let abortController: AbortController | null = null
 function startReply(msg: any) {
   replyingTo.value = { role: msg.role, content: msg.content }
   inputRef.value?.focus()
+}
+
+interface MsgSegment {
+  type: 'text' | 'image-prompt'
+  content: string
+  prompt?: string
+}
+
+function parseMessageContent(content: string): MsgSegment[] {
+  if (!content) return []
+  const regex = /<img\s+prompt="([^"]+)">/g
+  let lastIndex = 0
+  const segments: MsgSegment[] = []
+  let match
+  while ((match = regex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ type: 'text', content: content.slice(lastIndex, match.index) })
+    }
+    segments.push({ type: 'image-prompt', content: match[0], prompt: match[1] })
+    lastIndex = match.index + match[0].length
+  }
+  if (lastIndex < content.length) {
+    segments.push({ type: 'text', content: content.slice(lastIndex) })
+  }
+  return segments
+}
+
+async function handleGenerateImage(msg: ChatMessage, prompt: string, index: number) {
+  if (!msg.extra) {
+    msg.extra = {}
+  }
+  if (!(msg.extra as any).images) {
+    (msg.extra as any).images = {}
+  }
+  
+  if ((msg.extra as any).images[index]?.loading || (msg.extra as any).images[index]?.url) {
+    return
+  }
+
+  (msg.extra as any).images[index] = { loading: true, url: '', prompt }
+  chatStore.saveMessages(conversationId.value!)
+  scrollToBottom()
+
+  try {
+    const resUrl = await generateImageFromPrompt(prompt)
+    ;(msg.extra as any).images[index] = { loading: false, url: resUrl, prompt }
+  } catch (err: any) {
+    ;(msg.extra as any).images[index] = { loading: false, url: '', error: err.message || '生图失败', prompt }
+  }
+  chatStore.saveMessages(conversationId.value!)
+  scrollToBottom()
+}
+
+function previewImage(url: string) {
+  if (url) {
+    if (url.startsWith('data:image')) {
+      const win = window.open()
+      if (win) {
+        win.document.write(`<body style="margin:0;background:#000;display:flex;justify-content:center;align-items:center;height:100vh;"><img src="${url}" style="max-width:100%;max-height:100%;object-fit:contain;"></body>`)
+      }
+    } else {
+      window.open(url, '_blank')
+    }
+  }
 }
 
 function truncateText(text: string, max: number): string {
@@ -778,6 +874,8 @@ async function doAIReply(extraSystemHint?: string) {
   const s = settingsStore.settings
   if (!s.apiKey) return
 
+  const startMsgLength = chatStore.currentMessages.length
+
   isTyping.value = true
   streamingText.value = ''
   abortController = new AbortController()
@@ -844,6 +942,22 @@ async function doAIReply(extraSystemHint?: string) {
     } else {
       chatStore.addMessage(conversationId.value!, 'assistant', content)
       scrollToBottom()
+    }
+
+    // --- 自动生图逻辑 ---
+    if (isChatAutoImageGenEnabled()) {
+      const finalMsgs = chatStore.currentMessages
+      const newMsgs = finalMsgs.slice(startMsgLength)
+      for (const addedMsg of newMsgs) {
+        if (addedMsg.role === 'assistant') {
+          const contentSegments = parseMessageContent(addedMsg.content)
+          contentSegments.forEach((seg, idx) => {
+            if (seg.type === 'image-prompt' && seg.prompt) {
+              handleGenerateImage(addedMsg, seg.prompt, idx)
+            }
+          })
+        }
+      }
     }
   } catch (err: any) {
     isTyping.value = false
@@ -1842,4 +1956,79 @@ onUnmounted(() => {
 .reply-quote-inline { padding: 6px 8px; margin-bottom: 4px; background: rgba(0,0,0,0.06); border-radius: 6px; border-left: 2px solid var(--brand-primary); }
 .rqi-name { font-size: 11px; font-weight: 600; color: var(--brand-primary); display: block; }
 .rqi-text { font-size: 12px; color: var(--text-tertiary); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Chat Image Styles */
+.chat-image-block {
+  margin: 4px 0;
+  max-width: 240px;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+.chat-generated-image {
+  width: 100%;
+  height: auto;
+  display: block;
+  cursor: pointer;
+  border-radius: 8px;
+  border: 1px solid var(--separator);
+  object-fit: cover;
+}
+
+.chat-image-trigger,
+.chat-image-loading,
+.chat-image-error {
+  min-height: 100px;
+  background: var(--bg-primary);
+  border: 1px dashed var(--separator);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+  margin-top: 4px;
+}
+
+.chat-image-trigger svg {
+  width: 24px;
+  height: 24px;
+  stroke: var(--brand-primary, #007aff);
+}
+
+.chat-image-error {
+  color: var(--danger, #ff3b30);
+  border-color: var(--danger-light, #ff3b30);
+}
+
+.chat-image-error svg {
+  width: 24px;
+  height: 24px;
+}
+
+.chat-image-streaming-hint {
+  color: var(--text-secondary);
+  font-style: italic;
+  font-size: 13px;
+  margin-left: 4px;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border-color, #eee);
+  border-top-color: var(--brand-primary, #007aff);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 </style>

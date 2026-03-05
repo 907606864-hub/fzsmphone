@@ -742,6 +742,12 @@ ${userPersona.persona ? `Persona: ${userPersona.persona}` : ''}
 </规则>`)
   }
 
+  // 7. 附加图像生成能力
+  parts.push(`<附加功能>
+如果你想发送图片（例如自拍、分享照片、描述当前看到的画面等），请在回复中包含生图标记：<img prompt="图片的英文提示词">
+例如："给你看看我这里的风景~ <img prompt="beautiful sunset over the ocean, high quality, masterpiece">"
+</附加功能>`)
+
   return parts.join('\n\n')
 }
 

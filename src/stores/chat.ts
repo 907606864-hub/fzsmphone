@@ -41,7 +41,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
   msg_type: string
-  extra: Record<string, unknown>
+  extra: Record<string, any>
   created_at: string
   timestamp: number
 }

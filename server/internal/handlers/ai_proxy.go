@@ -301,3 +301,94 @@ func deriveModelsUrl(url string) string {
 	}
 	return strings.TrimRight(url, "/") + "/v1/models"
 }
+
+// POST /api/ai/image
+// Proxies image generation requests to avoid CORS issues on frontend.
+// Transparently passes the response body back, whether it's JSON, ZIP, or an image.
+func (h *AIProxyHandler) ImageProxy(w http.ResponseWriter, r *http.Request) {
+	userID, ok := mw.GetUserID(r.Context())
+	if !ok {
+		mw.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req struct {
+		TargetUrl string                 `json:"targetUrl"`
+		ApiKey    string                 `json:"apiKey"`
+		Headers   map[string]string      `json:"headers"`
+		Body      map[string]interface{} `json:"body"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		mw.Error(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.TargetUrl == "" {
+		mw.Error(w, http.StatusBadRequest, "targetUrl is required")
+		return
+	}
+
+	// Basic URL validation
+	if !strings.HasPrefix(req.TargetUrl, "http://") && !strings.HasPrefix(req.TargetUrl, "https://") {
+		mw.Error(w, http.StatusBadRequest, "invalid targetUrl scheme")
+		return
+	}
+
+	// Image generation can take a long time, use a larger timeout
+	upstreamTimeout := 120 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), upstreamTimeout)
+	defer cancel()
+
+	// Respect explicit client abort
+	go func() {
+		select {
+		case <-r.Context().Done():
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
+	bodyBytes, _ := json.Marshal(req.Body)
+	upReq, err := http.NewRequestWithContext(ctx, "POST", req.TargetUrl, bytes.NewReader(bodyBytes))
+	if err != nil {
+		mw.Error(w, http.StatusInternalServerError, "failed to create upstream request")
+		return
+	}
+
+	// Set headers
+	upReq.Header.Set("Content-Type", "application/json")
+	if req.ApiKey != "" {
+		upReq.Header.Set("Authorization", "Bearer "+req.ApiKey)
+	}
+	for k, v := range req.Headers {
+		upReq.Header.Set(k, v)
+	}
+
+	log.Printf("[AIProxy] image gen request from user=%d to url=%s", userID, req.TargetUrl)
+
+	client := &http.Client{}
+	resp, err := client.Do(upReq)
+	if err != nil {
+		log.Printf("[AIProxy] image upstream error: %v", err)
+		mw.Error(w, http.StatusBadGateway, fmt.Sprintf("Image API request failed: %v", err))
+		return
+	}
+	defer resp.Body.Close()
+
+	// Copy all headers from upstream response to client response, especially Content-Type
+	for k, v := range resp.Header {
+		w.Header()[k] = v
+	}
+
+	w.WriteHeader(resp.StatusCode)
+
+	// Stream the response back
+	n, err := io.Copy(w, resp.Body)
+	if err != nil {
+		log.Printf("[AIProxy] stream image chunks to client err: %v", err)
+	} else {
+		log.Printf("[AIProxy] image stream completed for user=%d, bytes=%d", userID, n)
+	}
+}
+

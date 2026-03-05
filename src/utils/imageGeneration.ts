@@ -11,6 +11,23 @@ import {
     type GeminiProviderConfig,
 } from './imageGenConfig'
 
+// ==================== 代理请求 ====================
+
+async function proxyFetch(
+    targetUrl: string,
+    apiKey: string,
+    headers: Record<string, string>,
+    body: unknown,
+    signal?: AbortSignal
+): Promise<Response> {
+    return fetch('/api/ai/image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetUrl, apiKey, headers, body }),
+        signal,
+    })
+}
+
 // ==================== Prompt 合成 ====================
 
 /** Tags 模式：提取所有标签并用逗号连接 */
@@ -528,17 +545,10 @@ export async function generateNovelAiImage(
 
     let resp: Response
     try {
-        resp = await fetch(url, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${nai.key}`,
-                'Content-Type': 'application/json',
-                Accept: 'application/zip, image/png, image/jpeg, application/json',
-                'x-correlation-id': correlationId,
-            },
-            body: JSON.stringify(body),
-            signal: options?.signal,
-        })
+        resp = await proxyFetch(url, nai.key, {
+            Accept: 'application/zip, image/png, image/jpeg, application/json',
+            'x-correlation-id': correlationId,
+        }, body, options?.signal)
     } catch (err) {
         // CORS check
         try {
@@ -595,17 +605,10 @@ async function generateOpenAiImage(
 
     console.info('[AI] image (openai)', { model, prompt: finalPrompt.slice(0, 100) })
 
-    const resp = await fetch(chatUrl, {
-        method: 'POST',
-        headers: {
-            Authorization: `Bearer ${oai.key}`,
-            'x-api-key': oai.key,
-            'Content-Type': 'application/json',
-            Accept: 'application/json, image/png, image/jpeg, application/zip',
-        },
-        body: JSON.stringify(reqBody),
-        signal,
-    })
+    const resp = await proxyFetch(chatUrl, oai.key, {
+        'x-api-key': oai.key,
+        Accept: 'application/json, image/png, image/jpeg, application/zip',
+    }, reqBody, signal)
 
     return handleResponse(resp)
 }
@@ -658,23 +661,18 @@ async function generateGeminiImage(
     }
 
     const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
         Accept: 'application/json',
     }
+    let apiKeyToProxy = ''
     if (apiUrl.includes('generativelanguage.googleapis.com')) {
         headers['x-goog-api-key'] = gem.key
     } else {
-        headers.Authorization = `Bearer ${gem.key}`
+        apiKeyToProxy = gem.key
     }
 
     console.info('[AI] image (gemini)', { model, prompt: finalPrompt.slice(0, 100) })
 
-    const resp = await fetch(apiUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(reqBody),
-        signal,
-    })
+    const resp = await proxyFetch(apiUrl, apiKeyToProxy, headers, reqBody, signal)
 
     return handleResponse(resp)
 }

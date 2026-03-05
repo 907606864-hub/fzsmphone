@@ -129,6 +129,26 @@
 
           <div class="setting-item">
             <div class="setting-label">
+              <span class="label-text">聊天自动点击生图</span>
+              <span class="label-desc">在聊天界面收到生图标记后自动生成图片</span>
+            </div>
+            <div class="toggle" :class="{ on: chatAutoImage }" @click="toggleChatAutoImage">
+              <div class="toggle-thumb"></div>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-label">
+              <span class="label-text">社交后台自动生图</span>
+              <span class="label-desc">刷微博/朋友圈时自动根据提示生图</span>
+            </div>
+            <div class="toggle" :class="{ on: socialAutoImage }" @click="toggleSocialAutoImage">
+              <div class="toggle-thumb"></div>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-label">
               <span class="label-text">生图通道</span>
               <span class="label-desc">选择 AI 生图服务类型</span>
             </div>
@@ -596,9 +616,23 @@ import NavBar from '@/components/common/NavBar.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { usePhoneStore } from '@/stores/phone'
 import { loadImageGenConfig, saveImageGenConfig, IMAGE_ASPECT_RATIO_OPTIONS, type ImageGenConfig } from '@/utils/imageGenConfig'
+import { isChatAutoImageGenEnabled, setChatAutoImageGenEnabled, isSocialAutoImageGenEnabled, setSocialAutoImageGenEnabled } from '@/utils/imageGenService'
 
 const settingsStore = useSettingsStore()
 const phoneStore = usePhoneStore()
+
+const chatAutoImage = ref(isChatAutoImageGenEnabled())
+const socialAutoImage = ref(isSocialAutoImageGenEnabled())
+
+function toggleChatAutoImage() {
+  chatAutoImage.value = !chatAutoImage.value
+  setChatAutoImageGenEnabled(chatAutoImage.value)
+}
+
+function toggleSocialAutoImage() {
+  socialAutoImage.value = !socialAutoImage.value
+  setSocialAutoImageGenEnabled(socialAutoImage.value)
+}
 
 // 直接引用 settings 的响应式对象（自动保存到 localStorage）
 const s = settingsStore.settings

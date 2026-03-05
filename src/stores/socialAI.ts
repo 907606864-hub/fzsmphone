@@ -5,6 +5,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { sendAIRequest } from '@/utils/aiService'
+import { generateImageFromPrompt, isSocialAutoImageGenEnabled } from '@/utils/imageGenService'
 import type { AIMessage } from '@/utils/aiService'
 import { buildPrompt } from '@/utils/socialPrompts'
 import type { SocialType } from '@/utils/socialPrompts'
@@ -27,6 +28,7 @@ import {
   parseMapContent,
   parseCalendarContent,
   generateId,
+  parseImagePrompts,
 } from '@/utils/socialParsers'
 import type {
   ForumThread,
@@ -377,7 +379,47 @@ export const useSocialAIStore = defineStore('socialAI', () => {
     } catch { /* ignore */ }
   }
 
-  // ==================== AI调用核心 ====================
+  
+// ==================== 通用图片生成处理 ====================
+function handleImagePromptsGenerically(content: string, parsedData: any, saveCallback: () => void) {
+  const prompts = parseImagePrompts(content)
+  if (Object.keys(prompts).length === 0) return
+
+  const shouldAutoGenerate = isSocialAutoImageGenEnabled()
+
+  const stack = [parsedData]
+  const seen = new Set()
+  
+  while (stack.length > 0) {
+    const curr = stack.pop()
+    if (!curr || typeof curr !== 'object' || seen.has(curr)) continue
+    seen.add(curr)
+    
+    if (curr.id && prompts[curr.id]) {
+      curr.imagePrompt = prompts[curr.id]
+      if (!curr.images) curr.images = []
+      
+      if (shouldAutoGenerate && curr.images.length === 0) {
+        generateImageFromPrompt(curr.imagePrompt).then(url => {
+          if (url) {
+            curr.images.push(url)
+            saveCallback()
+          }
+        }).catch(err => {
+          console.error(`[Social Image Gen] Failed for ${curr.id}: ${err.message}`)
+        })
+      }
+    }
+    
+    for (const key of Object.keys(curr)) {
+      if (typeof curr[key] === 'object') {
+        stack.push(curr[key])
+      }
+    }
+  }
+}
+
+// ==================== AI调用核心 ====================
   async function callAI(type: SocialType, action?: string): Promise<string> {
     const config = getAIConfig()
     if (!config.apiKey || !config.apiUrl || !config.model) {
@@ -420,6 +462,7 @@ export const useSocialAIStore = defineStore('socialAI', () => {
     try {
       const content = await callAI('forum', action)
       const data = parseForumContent(content)
+        handleImagePromptsGenerically(content, data, () => saveData('forum'))
 
       if (data.threads.length > 0) {
         // 合并新帖子（避免重复id）
@@ -495,6 +538,7 @@ export const useSocialAIStore = defineStore('socialAI', () => {
     try {
       const content = await callAI('weibo', action)
       const data = parseWeiboContent(content)
+        handleImagePromptsGenerically(content, data, () => saveData('weibo'))
 
       if (data.posts.length > 0 || data.hotSearches.length > 0) {
         // 合并博文
@@ -588,6 +632,7 @@ export const useSocialAIStore = defineStore('socialAI', () => {
     try {
       const content = await callAI('moments', action)
       const data = parseMomentsContent(content)
+        handleImagePromptsGenerically(content, data, () => saveData('moments'))
 
       if (data.moments.length > 0) {
         const existingIds = new Set(moments.value.map(m => m.id))
@@ -680,6 +725,7 @@ export const useSocialAIStore = defineStore('socialAI', () => {
     try {
       const content = await callAI('zhihu', action)
       const data = parseZhihuContent(content)
+        handleImagePromptsGenerically(content, data, () => saveData('zhihu'))
 
       if (data.questions.length > 0) {
         const existingIds = new Set(zhihuQuestions.value.map(q => q.id))
@@ -751,6 +797,7 @@ export const useSocialAIStore = defineStore('socialAI', () => {
     try {
       const content = await callAI('xiaohongshu', action)
       const data = parseXhsContent(content)
+        handleImagePromptsGenerically(content, data, () => saveData('xiaohongshu'))
 
       if (data.notes.length > 0) {
         const existingIds = new Set(xhsNotes.value.map(n => n.id))
@@ -806,6 +853,7 @@ export const useSocialAIStore = defineStore('socialAI', () => {
     try {
       const content = await callAI('douyin', action)
       const data = parseDouyinContent(content)
+        handleImagePromptsGenerically(content, data, () => saveData('douyin'))
 
       if (data.videos.length > 0) {
         const existingIds = new Set(douyinVideos.value.map(v => v.id))
