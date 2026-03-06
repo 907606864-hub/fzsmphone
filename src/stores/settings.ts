@@ -30,6 +30,7 @@ export interface ChatSettings {
   darkMode: boolean
   themeColor: string
   wallpaper: string
+  wallpaperImage: string
   fontSize: number
   customFontFamily: string
   // 聊天
@@ -64,6 +65,7 @@ const DEFAULT_SETTINGS: ChatSettings = {
   darkMode: false,
   themeColor: '#007aff',
   wallpaper: 'default',
+  wallpaperImage: '',
   fontSize: 2,
   customFontFamily: '',
   autoSave: true,
